@@ -1,0 +1,405 @@
+{
+  "columns": [
+    {
+      "name": "area",
+      "label": "区域",
+      "bizType": 100
+    },
+    {
+      "name": "createDateShow",
+      "label": "日期",
+      "bizType": 100
+    },
+    {
+      "name": "MDShow",
+      "label": "门店名称",
+      "bizType": 100
+    },
+    {
+      "name": "totalScore",
+      "label": "最终得分",
+      "bizType": 200
+    },
+    {
+      "name": "monthlyCanceledRate",
+      "label": "月累计取消率",
+      "bizType": 100
+    },
+    {
+      "name": "dailyCanceledRate",
+      "label": "当日取消率",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyMerchantRefundRate",
+      "label": "月累计商责退单率",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyOosRefundRate",
+      "label": "月累计缺货退款率",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyJdOosRate",
+      "label": "月累计京东秒送缺货出率",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyBadReviews",
+      "label": "月累计差评总数",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyBadReviewRate",
+      "label": "月累计差评率",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyPartialRefundRate",
+      "label": "月累计部分退款率",
+      "bizType": 100
+    },
+    {
+      "name": "dailyMeituanRating",
+      "label": "当日美团评分",
+      "bizType": 100
+    },
+    {
+      "name": "dailyElemeRating",
+      "label": "当日饿了么评分",
+      "bizType": 100
+    },
+    {
+      "name": "dailyMeituanReplyRate",
+      "label": "当日美团近7日首条消息1分钟人工回复率",
+      "bizType": 100
+    },
+    {
+      "name": "effectReply",
+      "label": "有效回复",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyMeituanPunctualityRate",
+      "label": "月累计美团配送准时率",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyElemeOntimeRate",
+      "label": "月累计饿了么及时送达率",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyJdFulfillmentRate",
+      "label": "月累计京东秒送订单履约率",
+      "bizType": 100
+    },
+    {
+      "name": "meituanComprehensiveExperienceDivision",
+      "label": "美团综合体体验分",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyAvgStockRate",
+      "label": "月平均有货率",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyAvgTop500StockRate",
+      "label": "月平均TOP500有货率",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyAvgDirectStockRate",
+      "label": "月平均直配直送有货率",
+      "bizType": 100
+    },
+    {
+      "name": "dailyTop500StockRate",
+      "label": "当日TOP500有货率",
+      "bizType": 100
+    },
+    {
+      "name": "dailyWarehouseSoldOut",
+      "label": "当日仓配售罄数",
+      "bizType": 100
+    },
+    {
+      "name": "dailyWarehouseStockRate",
+      "label": "当日仓配有货率",
+      "bizType": 100
+    },
+    {
+      "name": "dailyDirectSoldOut",
+      "label": "当日直送售罄数",
+      "bizType": 100
+    },
+    {
+      "name": "dailyDirectStockRate",
+      "label": "当日直送有货率",
+      "bizType": 100
+    },
+    {
+      "name": "dailyHybridSoldOut",
+      "label": "当日直配售罄数",
+      "bizType": 100
+    },
+    {
+      "name": "dailyStockAvailability",
+      "label": "当日有货率",
+      "bizType": 100
+    },
+    {
+      "name": "dailyHybridStockRate",
+      "label": "当日直配有货率",
+      "bizType": 100
+    },
+    {
+      "name": "stockNoLocation",
+      "label": "有库存无库位数",
+      "bizType": 100
+    },
+    {
+      "name": "expiryManagement",
+      "label": "效期管理",
+      "bizType": 100
+    },
+    {
+      "name": "inventoryLockOrders",
+      "label": "库存锁定单数",
+      "bizType": 100
+    },
+    {
+      "name": "trainingCompleted",
+      "label": "培训完结",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyManhourPer100Orders",
+      "label": "月累计百单编制工时",
+      "bizType": 200
+    },
+    {
+      "name": "monthlyTotalLoss",
+      "label": "月累计综合损溢额",
+      "bizType": 200
+    },
+    {
+      "name": "monthlyTotalLossRate",
+      "label": "月累计综合损溢率",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyAvgDeliveryFee",
+      "label": "本月累计单均配送费",
+      "bizType": 200
+    },
+    {
+      "name": "dailyAvgDeliveryFee",
+      "label": "当日单均配送费",
+      "bizType": 200
+    },
+    {
+      "name": "monthlyCumulativeCancelRateScore",
+      "label": "月累计取消率得分",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyMerchantLiabilityRefundRateScore",
+      "label": "月累计商责退单率得分",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyStockoutRefundRateScore",
+      "label": "月累计缺货退款率得分",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyNegativeReviewRateScore",
+      "label": "月累计差评率得分",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyPartialRefundRateScore",
+      "label": "月累计部分退款率得分",
+      "bizType": 100
+    },
+    {
+      "name": "dailyMeituanRatingScore",
+      "label": "当日美团评分得分",
+      "bizType": 100
+    },
+    {
+      "name": "dailyElemeRatingScore",
+      "label": "当日饿了么评分得分",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyMeituanDeliveryPunctualityRateScore",
+      "label": "月累计美团配送准时率得分",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyElemeTimelyDeliveryRateScore",
+      "label": "月累计饿了么及时送达率得分",
+      "bizType": 100
+    },
+    {
+      "name": "validReplyWeightingPenalty",
+      "label": "有效回复降权",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyAverageStockRateWeightingPenalty",
+      "label": "月平均有货率降权",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyAverageTop500StockRateWeightingPenalty",
+      "label": "月平均TOP500有货率降权",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyAverageDirectStockRateWeightingPenalty",
+      "label": "月平均直配直送有货率降权",
+      "bizType": 100
+    },
+    {
+      "name": "newProductComplianceListingWeightingPenalty",
+      "label": "新品合规上新降权",
+      "bizType": 100
+    },
+    {
+      "name": "expiryManagementWeightingPenalty",
+      "label": "效期管理降权",
+      "bizType": 100
+    },
+    {
+      "name": "inventoryLockWeightingPenalty",
+      "label": "库存锁定降权",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyCumulativeHundredOrdersManhourWeightingPenalty",
+      "label": "月累计百单编制工时降权",
+      "bizType": 100
+    },
+    {
+      "name": "totalScoreWithoutWeightingPenalty",
+      "label": "总得分（不含降权）",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyCumulativeMerchantLiabilityRefundRateWeightingPenalty",
+      "label": "月累计商责退单率降权",
+      "bizType": 100
+    },
+    {
+      "name": "monthlyCumulativeOutOfStockRefundRateWeightingPenalty",
+      "label": "月累计缺货退款率降权",
+      "bizType": 100
+    },
+    {
+      "name": "meituanComplexExperienceScoreWeightingPenalty",
+      "label": "美团综合体体验分降权",
+      "bizType": 100
+    },
+    {
+      "name": "meituanRatingWeightingPenalty",
+      "label": "美团评分降权",
+      "bizType": 100
+    },
+    {
+      "name": "elemeRatingWeightingPenalty",
+      "label": "饿了么评分降权",
+      "bizType": 100
+    },
+    {
+      "name": "partialRefundWeightingPenalty",
+      "label": "部分退款降权",
+      "bizType": 100
+    },
+    {
+      "name": "trainingCompletedWeightingPenalty",
+      "label": "培训完结降权",
+      "bizType": 100
+    },
+    {
+      "name": "totalWeightingPenalty",
+      "label": "总降权",
+      "bizType": 100
+    }
+  ],
+  "data": [
+    {
+      "ID": "44837",
+      "area": "1区",
+      "createDateShow": "2025-09-01",
+      "MDShow": "<font>[S030]京东便利店（城东店）</font>",
+      "totalScore": 92.28,
+      "monthlyCanceledRate": "3.01%",
+      "dailyCanceledRate": "3.01%",
+      "monthlyMerchantRefundRate": "0.16%",
+      "monthlyOosRefundRate": "0.00%",
+      "monthlyJdOosRate": "0.00%",
+      "monthlyBadReviews": "0",
+      "monthlyBadReviewRate": "0.00%",
+      "monthlyPartialRefundRate": "0.20%",
+      "dailyMeituanRating": "4.6",
+      "dailyElemeRating": "4.9",
+      "dailyMeituanReplyRate": "85.26%",
+      "effectReply": "正常",
+      "monthlyMeituanPunctualityRate": "94.24%",
+      "monthlyElemeOntimeRate": "92.55%",
+      "monthlyJdFulfillmentRate": "87.50%",
+      "meituanComprehensiveExperienceDivision": "94.8",
+      "monthlyAvgStockRate": "97.46%",
+      "monthlyAvgTop500StockRate": "95.20%",
+      "monthlyAvgDirectStockRate": "82.99%",
+      "dailyTop500StockRate": "95.20%",
+      "dailyWarehouseSoldOut": "189",
+      "dailyWarehouseStockRate": "97.71%",
+      "dailyDirectSoldOut": "20",
+      "dailyDirectStockRate": "77.27%",
+      "dailyHybridSoldOut": "5",
+      "dailyStockAvailability": "97.46%",
+      "dailyHybridStockRate": "91.53%",
+      "stockNoLocation": "3",
+      "expiryManagement": "正常",
+      "inventoryLockOrders": "0",
+      "trainingCompleted": "正常",
+      "monthlyManhourPer100Orders": 8.53,
+      "monthlyTotalLoss": -362.49,
+      "monthlyTotalLossRate": "-1.86%",
+      "monthlyAvgDeliveryFee": 5.73,
+      "dailyAvgDeliveryFee": 5.73,
+      "monthlyCumulativeCancelRateScore": "86.57",
+      "monthlyMerchantLiabilityRefundRateScore": "89.66",
+      "monthlyStockoutRefundRateScore": "100",
+      "monthlyNegativeReviewRateScore": "100",
+      "monthlyPartialRefundRateScore": "92.01",
+      "dailyMeituanRatingScore": "60",
+      "dailyElemeRatingScore": "86.67",
+      "monthlyMeituanDeliveryPunctualityRateScore": "100",
+      "monthlyElemeTimelyDeliveryRateScore": "100",
+      "validReplyWeightingPenalty": "0",
+      "monthlyAverageStockRateWeightingPenalty": "0",
+      "monthlyAverageTop500StockRateWeightingPenalty": "0",
+      "monthlyAverageDirectStockRateWeightingPenalty": "0",
+      "newProductComplianceListingWeightingPenalty": "0",
+      "expiryManagementWeightingPenalty": "0",
+      "inventoryLockWeightingPenalty": "0",
+      "monthlyCumulativeHundredOrdersManhourWeightingPenalty": "0",
+      "totalScoreWithoutWeightingPenalty": "92.28",
+      "monthlyCumulativeMerchantLiabilityRefundRateWeightingPenalty": "0",
+      "monthlyCumulativeOutOfStockRefundRateWeightingPenalty": "0",
+      "meituanComplexExperienceScoreWeightingPenalty": "0",
+      "meituanRatingWeightingPenalty": "0",
+      "elemeRatingWeightingPenalty": "0",
+      "partialRefundWeightingPenalty": "0",
+      "trainingCompletedWeightingPenalty": "0",
+      "totalWeightingPenalty": "0"
+    }
+  ]
+}
