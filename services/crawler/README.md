@@ -1,208 +1,173 @@
-# KSX数据爬虫
+# KSX爬虫服务
 
-基于Playwright的KSX网站数据爬虫，通过拦截API网络请求获取数据。
+## 概述
 
-## 功能特点
-
-- 🔐 **自动登录** - 自动完成网站登录流程
-- 🌐 **API拦截** - 拦截/UIProcessor网络请求获取原始数据
-- 📄 **智能分页** - 基于API返回的hasMore字段判断分页结束
-- 🔄 **数据去重** - 基于ID字段自动去重
-- 📊 **CSV导出** - 自动保存数据到CSV文件
-- 🎯 **准确提取** - 获取完整的67个字段，包含ID等关键字段
+KSX爬虫服务是一个用于抓取门店数据的自动化工具，支持多平台数据采集和存储。
 
 ## 项目结构
 
 ```
-crawler/
-├── main.py              # 主程序入口
-├── crawler.py           # 核心爬虫类
-├── config.py           # 配置文件
-├── utils.py            # 工具函数
-├── start.bat           # Windows启动脚本
-├── requirements.txt    # Python依赖
-├── data/              # 数据输出目录
-├── logs/              # 日志目录
-└── screenshots/       # 截图目录
+services/crawler/
+├── README.md              # 项目说明文档
+├── main.py               # 主程序入口
+├── config.py             # 配置文件
+├── crawler.py            # 核心爬虫逻辑
+├── init_database.py      # 数据库初始化脚本
+├── core/                 # 核心模块
+│   └── __init__.py
+├── utils/                # 工具模块
+│   ├── __init__.py
+│   └── utils.py          # 通用工具函数
+└── logs/                 # 日志目录（运行时生成）
 ```
 
-## 快速开始
+## 功能特性
 
-### 1. 环境准备
+- **多平台支持**: 支持美团、饿了么、京东等多个平台的数据抓取
+- **数据清洗**: 自动清洗和标准化数据格式
+- **数据库存储**: 支持SQLite数据库存储
+- **日志记录**: 完整的操作日志记录
+- **错误处理**: 完善的错误处理和重试机制
+- **配置管理**: 灵活的配置管理
 
-确保已安装Python 3.8+，然后安装依赖：
+## 安装依赖
+
+项目使用 `uv` 作为包管理器，请确保已安装 `uv`：
 
 ```bash
-pip install -r requirements.txt
+# 安装uv（如果未安装）
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 安装项目依赖
+uv sync
 ```
 
-### 2. 安装Playwright浏览器
+## 使用方法
+
+### 1. 基本使用
 
 ```bash
-playwright install chromium
-```
-
-### 3. 运行爬虫
-
-**Windows用户：**
-双击运行 `start.bat`
-
-**命令行用户：**
-```bash
+# 爬取昨天的数据
 python main.py
+
+# 爬取指定日期的数据
+python main.py --date 2025-01-15
+
+# 查看帮助
+python main.py --help
 ```
 
-## 配置说明
+### 2. 配置说明
 
-### 基本配置 (config.py)
-
-```python
-# 登录信息
-WEBSITE_URL = "https://ksx.dahuafuli.com:8306/"
-USERNAME = "fsrm001"
-PASSWORD = "fsrm001"
-
-# 浏览器设置
-HEADLESS = False  # 是否无头模式
-TIMEOUT = 30000   # 超时时间(毫秒)
-```
-
-### 日期范围
-
-默认抓取昨天的数据，可在 `crawler.py` 中的 `set_date_and_search()` 方法中修改：
+编辑 `config.py` 文件来配置爬虫参数：
 
 ```python
-# 计算目标日期
-yesterday = datetime.now() - timedelta(days=1)  # 昨天
-# yesterday = datetime.now() - timedelta(days=2)  # 前天
-```
+# 数据库配置
+DATABASE_PATH = "database/ksx_data.db"
 
-## 输出数据
+# 爬虫配置
+CRAWLER_CONFIG = {
+    "retry_times": 3,
+    "timeout": 30,
+    "delay": 1
+}
 
-### 数据格式
-
-爬虫会在 `data/` 目录下生成CSV文件，文件名格式：
-`ksx_api_data_YYYYMMDD_HHMMSS.csv`
-
-### 数据字段
-
-包含67个字段，主要包括：
-- **ID** - 记录唯一标识符
-- **MDShow** - 门店信息
-- **area** - 区域
-- **createDateShow** - 创建日期
-- **dailyXXX** - 日度指标
-- **monthlyXXX** - 月度指标
-- **totalScore** - 总评分
-- 等等...
-
-### 数据统计
-
-每次运行后会显示：
-- 总记录数
-- 字段数量
-- 去重前后对比
-- 文件保存路径
-
-## 技术实现
-
-### API拦截机制
-
-1. **请求监听** - 监听所有网络响应
-2. **URL过滤** - 筛选包含`/UIProcessor`的请求
-3. **数据解析** - 解析JSON响应获取data和pageInfo
-4. **状态判断** - 通过`hasMore`字段判断是否还有更多页
-
-### 分页策略
-
-```python
-# 基于API返回信息进行分页
-{
-    "success": true,
-    "data": [...],  # 当前页数据
-    "pageInfo": {
-        "pageSize": 50,
-        "pageNo": 1,
-        "hasMore": true,  # 是否还有更多页
-        "total": 346      # 总记录数
-    }
+# 日志配置
+LOG_CONFIG = {
+    "level": "INFO",
+    "format": "{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}"
 }
 ```
 
-### 错误处理
+### 3. 数据库初始化
 
-- **连接超时** - 自动重试机制
-- **元素未找到** - 等待和重试
-- **数据为空** - 记录日志并跳过
-- **浏览器崩溃** - 自动清理资源
+首次运行前，可以使用 `init_database.py` 生成测试数据：
 
-## 日志系统
-
-### 日志文件
-
-- `crawler.log` - 主要运行日志
-- `api_extraction.log` - API提取详细日志
-
-### 日志级别
-
-- **INFO** - 正常操作信息
-- **WARNING** - 警告信息
-- **ERROR** - 错误信息
-
-### 日志示例
-
+```bash
+python init_database.py
 ```
-2025-09-04 17:49:03,566 - crawler - INFO - ✅ 成功获取数据: 50 条记录
-2025-09-04 17:49:03,566 - crawler - INFO - 📄 分页信息: {'pageSize': 50, 'pageNo': 1, 'hasMore': True, 'total': 346}
-```
+
+## API接口
+
+爬虫服务通过以下API接口与前端和后端服务交互：
+
+- `GET /api/data` - 获取数据列表
+- `POST /api/sync-data` - 同步数据
+- `GET /api/stores` - 获取门店列表
+
+## 开发指南
+
+### 添加新的数据源
+
+1. 在 `crawler.py` 中添加新的爬虫类
+2. 实现必要的方法：`crawl()`, `parse()`, `save()`
+3. 在 `main.py` 中注册新的爬虫
+
+### 自定义数据处理
+
+在 `utils/utils.py` 中添加自定义的数据处理函数。
+
+### 日志配置
+
+日志文件保存在 `logs/` 目录下，按日期自动分割。
 
 ## 故障排除
 
 ### 常见问题
 
-1. **登录失败**
-   - 检查用户名密码是否正确
-   - 确认网站是否正常访问
+1. **依赖安装失败**
+   ```bash
+   # 清理缓存重新安装
+   uv cache clean
+   uv sync
+   ```
 
-2. **数据为空**
-   - 检查日期范围是否有数据
-   - 确认搜索条件是否正确
+2. **数据库连接失败**
+   - 检查数据库文件路径是否正确
+   - 确保有足够的磁盘空间
+   - 检查文件权限
 
-3. **浏览器启动失败**
-   - 运行 `playwright install chromium`
-   - 检查系统环境变量
-
-4. **网络请求超时**
-   - 增加超时时间设置
+3. **爬虫执行失败**
    - 检查网络连接
+   - 查看日志文件了解详细错误信息
+   - 确认目标网站是否可访问
 
-### 调试模式
+### 日志查看
 
-在 `main.py` 中设置：
+```bash
+# 查看最新日志
+tail -f logs/crawler_$(date +%Y-%m-%d).log
 
-```python
-crawler = KSXCrawler(headless=False)  # 显示浏览器窗口
+# 查看错误日志
+grep "ERROR" logs/crawler_*.log
 ```
 
-## 更新日志
+## 性能优化
 
-### v2.0.0 (2025-09-04)
-- ✨ 重构为API拦截模式
-- 🔄 移除DOM解析方法
-- 📊 新增完整字段支持(67个字段)
-- 🎯 基于ID字段的数据去重
-- 📄 智能分页判断
-- 🧹 清理项目结构
+- 调整并发数量以平衡性能和稳定性
+- 使用适当的延迟避免被反爬虫机制检测
+- 定期清理日志文件释放磁盘空间
 
-### v1.0.0
-- 🎉 初始版本
-- 🔐 基本登录功能
-- 📄 DOM元素数据提取
+## 安全注意事项
+
+- 遵守网站的robots.txt规则
+- 不要过于频繁地请求同一网站
+- 保护敏感配置信息
+- 定期更新依赖包以修复安全漏洞
+
+## 版本历史
+
+- v1.0.0 - 初始版本，支持基本的数据抓取功能
+- v1.1.0 - 添加多平台支持和数据清洗功能
+- v1.2.0 - 优化性能和错误处理机制
+
+## 贡献指南
+
+1. Fork 项目
+2. 创建功能分支
+3. 提交更改
+4. 创建 Pull Request
 
 ## 许可证
 
-本项目仅供学习和研究使用。
-
-## 贡献
-
-欢迎提交Issue和Pull Request！
+本项目采用 MIT 许可证。

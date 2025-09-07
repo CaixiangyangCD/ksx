@@ -248,10 +248,13 @@ async def save_to_database(data: list) -> int:
         # 获取数据库管理器
         db_manager = get_db_manager()
         
-        # 插入数据（会自动去重）
-        inserted_count = db_manager.insert_data(data)
+        # 计算昨天的日期，与爬取日期保持一致
+        yesterday = datetime.now() - timedelta(days=1)
         
-        logger.info(f"✅ 成功保存 {inserted_count} 条记录到数据库")
+        # 插入数据（会自动去重），使用昨天的日期
+        inserted_count = db_manager.insert_data(data, date=yesterday)
+        
+        logger.info(f"✅ 成功保存 {inserted_count} 条记录到数据库（日期: {yesterday.strftime('%Y-%m-%d')}）")
         
         # 清理旧数据库（保留近1个月）
         db_manager.cleanup_old_databases(keep_months=1)

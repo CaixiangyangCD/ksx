@@ -26,6 +26,7 @@ LOGIN_CONFIG = {
 # 浏览器配置
 BROWSER_CONFIG = {
     'headless': False,  # 是否无头模式
+    'browser_path': '../playwright-config/browsers',  # 自定义浏览器安装路径
     'viewport': {
         'width': 1920,
         'height': 1080
@@ -52,8 +53,8 @@ LOGGING_CONFIG = {
 
 # 文件路径配置
 PATH_CONFIG = {
-    'screenshots': 'screenshots',
-    'downloads': 'downloads',
+    'screenshots': '../playwright-config/screenshots',
+    'downloads': '../playwright-config/downloads',
     'logs': 'logs',
     'data': 'data'
 }

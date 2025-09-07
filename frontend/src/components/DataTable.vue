@@ -68,20 +68,6 @@ const emit = defineEmits<Emits>()
 
 const columns: Column[] = [
   {
-    title: '自增ID',
-    dataIndex: 'id',
-    key: 'id',
-    width: 80,
-    fixed: 'left'
-  },
-  {
-    title: '原始ID',
-    dataIndex: 'rawId',
-    key: 'rawId',
-    width: 100,
-    fixed: 'left'
-  },
-  {
     title: '区域',
     dataIndex: 'area',
     key: 'area',
@@ -342,8 +328,9 @@ const handleTableChange = (pagination: any, filters: any, sorter: any) => {
 <style scoped>
 .data-table {
   background: #fff;
-  border-radius: 6px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
 }
 
 /* 自定义表格样式 */

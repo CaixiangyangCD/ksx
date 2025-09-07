@@ -37,6 +37,9 @@ class DatabaseManager:
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(exist_ok=True)
         
+        # 调试：记录base_dir路径
+        logger.info(f"DatabaseManager初始化: base_dir = {self.base_dir}")
+        
         # 固定的数据表结构定义
         self.schema = self._get_schema()
         
@@ -430,6 +433,80 @@ class DatabaseManager:
             logger.error(f"获取数据库信息失败: {e}")
             
         return info
+    
+    def get_stores(self) -> List[Dict[str, str]]:
+        """
+        获取门店列表
+        
+        Returns:
+            门店列表，包含name和value字段
+        """
+        stores = []
+        
+        # 遍历所有数据库文件，收集门店信息
+        for db_file in self.base_dir.rglob("ksx_*.db"):
+            try:
+                conn = sqlite3.connect(str(db_file))
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                
+                # 查询门店列表
+                cursor.execute("""
+                    SELECT DISTINCT MDShow as name, MDShow as value
+                    FROM ksx_data 
+                    WHERE MDShow IS NOT NULL AND MDShow != ''
+                    ORDER BY MDShow
+                """)
+                
+                for row in cursor.fetchall():
+                    store = dict(row)
+                    if store not in stores:
+                        stores.append(store)
+                
+                conn.close()
+                
+            except Exception as e:
+                logger.warning(f"读取数据库文件 {db_file} 失败: {e}")
+                continue
+        
+        return stores
+    
+    def execute_query(self, query: str, params: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+        """
+        执行自定义查询
+        
+        Args:
+            query: SQL查询语句
+            params: 查询参数
+            
+        Returns:
+            查询结果列表
+        """
+        if params is None:
+            params = {}
+            
+        results = []
+        
+        # 遍历所有数据库文件，执行查询
+        for db_file in self.base_dir.rglob("ksx_*.db"):
+            try:
+                conn = sqlite3.connect(str(db_file))
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                
+                # 执行查询
+                cursor.execute(query, params)
+                
+                for row in cursor.fetchall():
+                    results.append(dict(row))
+                
+                conn.close()
+                
+            except Exception as e:
+                logger.warning(f"执行查询失败 {db_file}: {e}")
+                continue
+        
+        return results
 
 
 # 单例模式
