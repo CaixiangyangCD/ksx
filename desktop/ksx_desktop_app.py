@@ -979,6 +979,13 @@ def main():
     os.environ["QT_MAC_WANTS_LAYER"] = "1"
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
     
+    # 修复 Metal 着色器问题
+    os.environ["QT_MAC_DISABLE_METAL"] = "1"
+    os.environ["QT_OPENGL"] = "software"
+    
+    # 禁用硬件加速以避免权限问题
+    os.environ["QT_QUICK_BACKEND"] = "software"
+    
     # 检查依赖
     if not check_dependencies():
         print("\n请先安装必要的依赖包")

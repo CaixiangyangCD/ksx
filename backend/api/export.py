@@ -22,17 +22,23 @@ def get_app_data_dir():
     """获取应用数据目录，支持打包后的应用"""
     if getattr(sys, 'frozen', False):
         # PyInstaller打包后的情况
-        # 从可执行文件路径找到dist目录
+        # 检查是否在Applications目录中（DMG安装版本）
         executable_path = sys.executable
-        if "KSX门店管理系统" in executable_path:
-            # 找到dist目录
-            parts = executable_path.split(os.sep)
-            for i, part in enumerate(parts):
-                if part == "dist":
-                    dist_dir = os.sep.join(parts[:i+1])
-                    return os.path.join(dist_dir, "data")
-        # 如果找不到dist目录，使用默认路径
-        return os.path.join(os.path.dirname(sys.executable), "data")
+        if "/Applications/" in executable_path:
+            # DMG安装版本：导出到下载文件夹
+            downloads_dir = os.path.expanduser("~/Downloads")
+            return downloads_dir
+        else:
+            # 开发版本：使用dist目录
+            if "KSX门店管理系统" in executable_path:
+                # 找到dist目录
+                parts = executable_path.split(os.sep)
+                for i, part in enumerate(parts):
+                    if part == "dist":
+                        dist_dir = os.sep.join(parts[:i+1])
+                        return os.path.join(dist_dir, "data")
+            # 如果找不到dist目录，使用默认路径
+            return os.path.join(os.path.dirname(sys.executable), "data")
     else:
         # 开发环境
         return os.path.join(project_root, "backend", "exports")

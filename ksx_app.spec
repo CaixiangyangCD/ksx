@@ -40,5 +40,23 @@ app = BUNDLE(
     exe,
     name='KSX门店管理系统.app',
     icon=None,
-    bundle_identifier=None,
+    bundle_identifier='com.ksx.storemanagement',
+    info_plist={
+        'NSAppTransportSecurity': {
+            'NSAllowsArbitraryLoads': True
+        },
+        'NSSupportsAutomaticGraphicsSwitching': True,
+        'NSMicrophoneUsageDescription': 'This app does not use microphone',
+        'NSCameraUsageDescription': 'This app does not use camera',
+        'NSDesktopFolderUsageDescription': 'This app needs access to save files',
+        'NSDocumentsFolderUsageDescription': 'This app needs access to save files',
+        'NSDownloadsFolderUsageDescription': 'This app needs access to save files',
+        'CFBundleDisplayName': 'KSX门店管理系统',
+        'CFBundleName': 'KSX门店管理系统',
+        'CFBundleVersion': '1.0.0',
+        'CFBundleShortVersionString': '1.0.0',
+        'LSMinimumSystemVersion': '10.15.0',
+        'NSHighResolutionCapable': True,
+        'NSRequiresAquaSystemAppearance': False
+    },
 )
