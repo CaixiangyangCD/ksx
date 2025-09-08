@@ -7,9 +7,22 @@
 
 import sqlite3
 import os
+import sys
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from loguru import logger
+
+def get_config_db_path():
+    """获取配置数据库路径，支持打包后的应用"""
+    if getattr(sys, 'frozen', False):
+        # PyInstaller打包后的情况
+        app_dir = os.path.dirname(sys.executable)
+        return os.path.join(app_dir, "database", "config.db")
+    else:
+        # 开发环境
+        current_file = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_file)
+        return os.path.join(project_root, "database", "config.db")
 
 class ConfigDatabaseManager:
     """配置数据库管理器"""
@@ -22,13 +35,13 @@ class ConfigDatabaseManager:
             db_path: 数据库文件路径，默认为backend/config.db
         """
         if db_path is None:
-            # 使用绝对路径，确保能找到配置文件
-            import os
-            current_file = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(current_file)
-            self.db_path = os.path.join(project_root, "database", "config.db")
+            # 使用正确的配置数据库路径
+            self.db_path = get_config_db_path()
         else:
             self.db_path = db_path
+        
+        # 确保数据库目录存在
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self.init_database()
     
     def init_database(self):

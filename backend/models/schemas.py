@@ -9,6 +9,12 @@ from typing import Optional, List, Dict, Any, Union
 from datetime import datetime, date
 
 
+# 请求模型
+class SyncRequest(BaseModel):
+    """同步请求模型"""
+    date: Optional[str] = None  # 可选，如果不提供则使用默认日期
+
+
 class SyncDataRequest(BaseModel):
     """同步数据请求模型"""
     date: str
@@ -35,6 +41,33 @@ class ExportFieldRuleRequest(BaseModel):
     selected_fields: List[str]
 
 
+# 响应模型
+class PageResponse(BaseModel):
+    """分页响应模型"""
+    data: List[Dict[str, Any]]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    success: bool = True
+    message: str = "查询成功"
+
+
+class ErrorResponse(BaseModel):
+    """错误响应模型"""
+    success: bool = False
+    message: str
+    error_code: Optional[str] = None
+
+
+class SyncResponse(BaseModel):
+    """同步响应模型"""
+    success: bool
+    message: str
+    total: Optional[int] = None
+    error_code: Optional[str] = None
+
+
 class DataResponse(BaseModel):
     """数据响应模型"""
     success: bool
@@ -45,13 +78,6 @@ class DataResponse(BaseModel):
     message: Optional[str] = None
 
 
-class SyncResponse(BaseModel):
-    """同步响应模型"""
-    success: bool
-    message: str
-    total: Optional[int] = None
-
-
 class ExportResponse(BaseModel):
     """导出响应模型"""
     success: bool
@@ -59,6 +85,7 @@ class ExportResponse(BaseModel):
     filename: Optional[str] = None
     csv_content: Optional[str] = None
     file_path: Optional[str] = None
+    excel_content: Optional[str] = None  # Excel文件的十六进制内容
     count: Optional[int] = None
 
 
@@ -74,3 +101,16 @@ class ConfigResponse(BaseModel):
     success: bool
     data: Optional[Union[Dict[str, Any], List[Any]]] = None
     message: Optional[str] = None
+
+
+class DatabaseInfoResponse(BaseModel):
+    """数据库信息响应模型"""
+    success: bool
+    data: Optional[Dict[str, Any]] = None
+
+
+class DatesResponse(BaseModel):
+    """日期列表响应模型"""
+    success: bool
+    dates: Optional[List[str]] = None
+    total: Optional[int] = None

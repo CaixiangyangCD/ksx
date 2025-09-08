@@ -413,7 +413,7 @@ async def get_stores():
         for i, store in enumerate(raw_stores):
             stores.append({
                 'id': i + 1,  # 生成唯一ID
-                'store_name': store['name'],  # 使用name字段作为store_name
+                'store_name': store['store_name'],  # 使用name字段作为store_name
                 'created_at': '2025-01-01T00:00:00Z',  # 默认时间
                 'updated_at': '2025-01-01T00:00:00Z'   # 默认时间
             })

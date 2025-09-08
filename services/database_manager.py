@@ -9,10 +9,23 @@ import sqlite3
 import json
 import os
 import shutil
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from loguru import logger
+
+def get_database_dir():
+    """获取数据库目录，支持打包后的应用"""
+    if getattr(sys, 'frozen', False):
+        # PyInstaller打包后的情况
+        app_dir = os.path.dirname(sys.executable)
+        return os.path.join(app_dir, "database")
+    else:
+        # 开发环境
+        current_file = Path(__file__).resolve()
+        project_root = current_file.parent.parent
+        return str(project_root / "database")
 
 
 class DatabaseManager:
@@ -26,13 +39,8 @@ class DatabaseManager:
             base_dir: 数据库根目录，默认为项目根目录下的database
         """
         if base_dir is None:
-            # 查找项目根目录
-            current_file = Path(__file__).resolve()
-            project_root = current_file.parent.parent  # services/database_manager.py -> project_root
-            base_dir = project_root / "database"
-            
-            # 确保使用绝对路径
-            base_dir = base_dir.resolve()
+            # 使用正确的数据库目录
+            base_dir = get_database_dir()
         
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(exist_ok=True)

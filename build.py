@@ -81,14 +81,6 @@ datas = [
     (str(project_root / "services" / "browser_manager.py"), "services"),
 ]
 
-# 排除Playwright浏览器文件，让应用在运行时动态安装
-excludes = [
-    'playwright._impl._browser_type',
-    'playwright._impl._browser',
-    'playwright._impl._browser_context',
-    'playwright._impl._page',
-]
-
 # 隐藏导入
 hiddenimports = [
     "PySide6.QtCore",
@@ -131,6 +123,9 @@ excludes = [
     "pytest",
     "sphinx",
 ]
+
+# 排除Playwright浏览器二进制文件
+binaries = []
 
 # 主程序
 a = Analysis(

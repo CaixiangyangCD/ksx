@@ -17,7 +17,6 @@ sys.path.append(project_root)
 
 # 导入API路由
 from backend.api import data, sync, export
-from backend import main
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -42,30 +41,55 @@ logger.add(
     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan> - <level>{message}</level>",
     level="INFO"
 )
+logger.add(
+    "logs/api_{time:YYYY-MM-DD}.log",
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name} - {message}",
+    level="DEBUG",
+    rotation="1 day",
+    retention="30 days",
+    compression="zip",
+    encoding="utf-8"
+)
 
 # 注册路由
 app.include_router(data.router)
 app.include_router(sync.router)
 app.include_router(export.router)
 
-# 注册main.py中的路由
-app.include_router(main.app.router)
 
-
-@app.get("/")
+@app.get("/", response_model=dict)
 async def root():
     """根路径"""
-    return {"message": "KSX数据查询API服务", "version": "1.0.0"}
+    return {
+        "message": "KSX数据查询API服务",
+        "version": "1.0.0",
+        "docs_url": "/docs"
+    }
 
-
-@app.get("/health")
+@app.get("/api/health", response_model=dict)
 async def health_check():
     """健康检查"""
-    return {"status": "healthy"}
+    from datetime import datetime
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat()
+    }
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=18888)
+    
+    # 创建logs目录
+    os.makedirs("logs", exist_ok=True)
+    
+    logger.info("启动KSX数据查询API服务...")
+    
+    uvicorn.run(
+        "app:app",
+        host="127.0.0.1",
+        port=18888,
+        reload=True,
+        log_level="info"
+    )
 
 

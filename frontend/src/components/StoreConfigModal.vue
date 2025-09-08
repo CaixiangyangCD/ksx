@@ -48,18 +48,17 @@
             </div>
             
             <div class="store-list">
-              <a-checkbox-group v-model:value="selectedStores" class="checkbox-group">
-                <div class="store-grid">
-                  <a-checkbox 
-                    v-for="store in filteredStores" 
-                    :key="store.id" 
-                    :value="store.id"
-                    class="store-item"
-                  >
-                    {{ store.store_name }}
-                  </a-checkbox>
-                </div>
-              </a-checkbox-group>
+              <div class="store-grid">
+                <a-checkbox 
+                  v-for="store in filteredStores" 
+                  :key="store.id" 
+                  :checked="selectedStores.includes(store.id)"
+                  @change="(e: any) => handleStoreChange(store.id, e.target.checked)"
+                  class="store-item"
+                >
+                  {{ store.store_name }}
+                </a-checkbox>
+              </div>
               <div v-if="stores.length === 0" class="no-stores">
                 <p>暂无门店数据，请先同步数据</p>
               </div>
@@ -176,14 +175,31 @@ const visible = ref(false)
 const selectedStores = ref<number[]>([])
 const saving = ref(false)
 const searchKeyword = ref('')
+const debouncedSearchKeyword = ref('')
+
+// 创建防抖搜索函数
+let searchTimeout: number | null = null
+const debouncedSearch = (keyword: string) => {
+  if (searchTimeout) {
+    clearTimeout(searchTimeout)
+  }
+  searchTimeout = setTimeout(() => {
+    debouncedSearchKeyword.value = keyword
+  }, 300)
+}
+
+// 监听搜索关键词变化
+watch(searchKeyword, (newKeyword) => {
+  debouncedSearch(newKeyword)
+})
 
 // 过滤后的门店列表
 const filteredStores = computed(() => {
-  if (!searchKeyword.value.trim()) {
+  if (!debouncedSearchKeyword.value.trim()) {
     return props.stores
   }
   
-  const keyword = searchKeyword.value.toLowerCase().trim()
+  const keyword = debouncedSearchKeyword.value.toLowerCase().trim()
   return props.stores.filter(store => 
     store.store_name.toLowerCase().includes(keyword)
   )
@@ -201,6 +217,7 @@ watch(() => props.open, (newVal) => {
     }
     // 清空搜索关键词
     searchKeyword.value = ''
+    debouncedSearchKeyword.value = ''
   }
 })
 
@@ -249,6 +266,22 @@ const selectFiltered = () => {
 const getStoreName = (storeId: number) => {
   const store = props.stores.find(s => s.id === storeId)
   return store ? store.store_name : `门店ID: ${storeId}`
+}
+
+// 处理门店选择变化
+const handleStoreChange = (storeId: number, checked: boolean) => {
+  if (checked) {
+    // 添加到选择列表
+    if (!selectedStores.value.includes(storeId)) {
+      selectedStores.value.push(storeId)
+    }
+  } else {
+    // 从选择列表移除
+    const index = selectedStores.value.indexOf(storeId)
+    if (index > -1) {
+      selectedStores.value.splice(index, 1)
+    }
+  }
 }
 
 // 移除门店
@@ -369,21 +402,37 @@ const removeStore = (storeId: number) => {
   
   .store-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 8px;
     align-items: start;
   }
   
   .store-item {
     margin: 0;
-    padding: 8px 12px;
-    border-radius: 4px;
-    transition: background-color 0.2s;
+    padding: 12px 16px;
+    border-radius: 6px;
+    transition: all 0.2s;
     border: 1px solid #f0f0f0;
+    background-color: #fafafa;
+    display: flex;
+    align-items: center;
+    min-height: 44px;
     
     &:hover {
       background-color: #f5f5f5;
       border-color: #d9d9d9;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    :deep(.ant-checkbox) {
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
+    
+    :deep(.ant-checkbox + span) {
+      flex: 1;
+      line-height: 1.4;
+      word-break: break-word;
     }
   }
   

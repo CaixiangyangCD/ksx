@@ -109,9 +109,49 @@ class StartupCheckThread(QThread):
     
     def setup_environment(self):
         """设置环境变量"""
-        browser_path = os.path.join(self.project_root, "playwright-browsers")
+        if getattr(sys, 'frozen', False):
+            # 打包后的应用，使用应用内部目录
+            app_dir = os.path.dirname(sys.executable)
+            browser_path = os.path.join(app_dir, "playwright-browsers")
+            
+            # 检查并安装Playwright浏览器
+            self.install_playwright_browsers(browser_path)
+        else:
+            # 开发环境
+            browser_path = os.path.join(self.project_root, "playwright-browsers")
+        
         os.makedirs(browser_path, exist_ok=True)
         os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browser_path
+        print(f"设置Playwright浏览器路径: {browser_path}")
+    
+    def install_playwright_browsers(self, browser_path):
+        """安装Playwright浏览器"""
+        try:
+            # 检查是否已经安装了浏览器
+            chromium_path = os.path.join(browser_path, "chromium-1091", "chrome-mac", "Chromium.app")
+            if os.path.exists(chromium_path):
+                print("Playwright浏览器已存在，跳过安装")
+                return
+            
+            print("正在安装Playwright浏览器...")
+            import subprocess
+            
+            # 设置环境变量
+            env = os.environ.copy()
+            env["PLAYWRIGHT_BROWSERS_PATH"] = browser_path
+            
+            # 安装Chromium浏览器
+            result = subprocess.run([
+                sys.executable, "-m", "playwright", "install", "chromium"
+            ], env=env, capture_output=True, text=True, timeout=300)
+            
+            if result.returncode == 0:
+                print("Playwright浏览器安装成功")
+            else:
+                print(f"Playwright浏览器安装失败: {result.stderr}")
+                
+        except Exception as e:
+            print(f"安装Playwright浏览器时出错: {e}")
 
 
 class FastAPIThread(QThread):

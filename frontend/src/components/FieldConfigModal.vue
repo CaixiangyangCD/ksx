@@ -48,18 +48,17 @@
             </div>
             
             <div class="field-list">
-              <a-checkbox-group v-model:value="selectedFields" class="checkbox-group">
-                <div class="field-grid">
-                  <a-checkbox 
-                    v-for="field in filteredFields" 
-                    :key="field.key" 
-                    :value="field.key"
-                    class="field-item"
-                  >
-                    {{ field.name }}
-                  </a-checkbox>
-                </div>
-              </a-checkbox-group>
+              <div class="field-grid">
+                <a-checkbox 
+                  v-for="field in filteredFields" 
+                  :key="field.key" 
+                  :checked="selectedFields.includes(field.key)"
+                  @change="(e: any) => handleFieldChange(field.key, e.target.checked)"
+                  class="field-item"
+                >
+                  {{ field.name }}
+                </a-checkbox>
+              </div>
               <div v-if="Object.keys(fieldConfig).length === 0" class="no-fields">
                 <p>暂无字段数据</p>
               </div>
@@ -175,18 +174,35 @@ const visible = ref(false)
 const selectedFields = ref<string[]>([])
 const saving = ref(false)
 const searchKeyword = ref('')
+const debouncedSearchKeyword = ref('')
 const originalFields = ref<string[]>([]) // 保存原始配置
+
+// 创建防抖搜索函数
+let searchTimeout: number | null = null
+const debouncedSearch = (keyword: string) => {
+  if (searchTimeout) {
+    clearTimeout(searchTimeout)
+  }
+  searchTimeout = setTimeout(() => {
+    debouncedSearchKeyword.value = keyword
+  }, 300)
+}
+
+// 监听搜索关键词变化
+watch(searchKeyword, (newKeyword) => {
+  debouncedSearch(newKeyword)
+})
 
 // 过滤后的字段列表
 const filteredFields = computed(() => {
-  if (!searchKeyword.value.trim()) {
+  if (!debouncedSearchKeyword.value.trim()) {
     return Object.entries(props.fieldConfig).map(([key, config]) => ({
       key,
       name: config.name
     }))
   }
   
-  const keyword = searchKeyword.value.toLowerCase().trim()
+  const keyword = debouncedSearchKeyword.value.toLowerCase().trim()
   return Object.entries(props.fieldConfig)
     .filter(([key, config]) => 
       config.name.toLowerCase().includes(keyword) || 
@@ -235,6 +251,7 @@ watch(() => props.open, (newVal) => {
     }
     // 清空搜索关键词
     searchKeyword.value = ''
+    debouncedSearchKeyword.value = ''
   }
 })
 
@@ -304,6 +321,22 @@ const selectFiltered = () => {
 const getFieldName = (fieldKey: string) => {
   const field = props.fieldConfig[fieldKey]
   return field ? field.name : `字段: ${fieldKey}`
+}
+
+// 处理字段选择变化
+const handleFieldChange = (fieldKey: string, checked: boolean) => {
+  if (checked) {
+    // 添加到选择列表
+    if (!selectedFields.value.includes(fieldKey)) {
+      selectedFields.value.push(fieldKey)
+    }
+  } else {
+    // 从选择列表移除
+    const index = selectedFields.value.indexOf(fieldKey)
+    if (index > -1) {
+      selectedFields.value.splice(index, 1)
+    }
+  }
 }
 
 // 移除字段
@@ -401,20 +434,39 @@ const removeField = (fieldKey: string) => {
   
   .field-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 8px;
+    align-items: start;
   }
   
   .field-item {
     margin: 0;
-    padding: 8px 12px;
-    border-radius: 4px;
-    transition: background-color 0.2s;
+    padding: 10px 12px;
+    border-radius: 6px;
+    transition: all 0.2s;
     border: 1px solid #f0f0f0;
+    background-color: #fafafa;
+    display: flex;
+    align-items: flex-center;
+    min-height: 40px;
     
     &:hover {
       background-color: #f5f5f5;
       border-color: #d9d9d9;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    :deep(.ant-checkbox) {
+      margin-right: 8px;
+      margin-top: 2px;
+      flex-shrink: 0;
+    }
+    
+    :deep(.ant-checkbox + span) {
+      flex: 1;
+      line-height: 1.4;
+      word-break: break-word;
+      font-size: 13px;
     }
   }
   
