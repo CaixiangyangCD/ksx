@@ -13,14 +13,77 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from loguru import logger
+# 尝试导入loguru，如果失败则使用标准logging
+try:
+    from loguru import logger
+    LOGGER_AVAILABLE = True
+except ImportError:
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    LOGGER_AVAILABLE = False
+    print("警告: loguru不可用，使用标准logging模块")
 
 def get_database_dir():
     """获取数据库目录，支持打包后的应用"""
+    # 首先检查环境变量
+    env_db_dir = os.environ.get('KSX_DATABASE_DIR')
+    if env_db_dir:
+        print(f"🔍 调试：使用环境变量指定的数据库目录: {env_db_dir}")
+        return env_db_dir
+    
     if getattr(sys, 'frozen', False):
         # PyInstaller打包后的情况
-        app_dir = os.path.dirname(sys.executable)
-        return os.path.join(app_dir, "database")
+        print(f"🔍 调试：sys.executable = {sys.executable}")
+        print(f"🔍 调试：sys.frozen = {getattr(sys, 'frozen', False)}")
+        
+        # 尝试多种方法找到正确的应用目录
+        executable_path = Path(sys.executable)
+        print(f"🔍 调试：executable_path = {executable_path}")
+        
+        # 方法1：尝试从临时目录向上查找.app目录
+        current_path = executable_path
+        app_dir = None
+        
+        # 向上查找最多5层目录
+        for i in range(5):
+            print(f"🔍 调试：检查路径 {i}: {current_path}")
+            if current_path.name.endswith('.app'):
+                app_dir = current_path
+                print(f"🔍 调试：找到.app目录: {app_dir}")
+                break
+            if current_path.parent == current_path:  # 到达根目录
+                break
+            current_path = current_path.parent
+        
+        if app_dir:
+            database_dir = app_dir / "database"
+            print(f"🔍 调试：使用.app目录: {database_dir}")
+        else:
+            # 方法2：如果找不到.app目录，尝试使用固定的dist路径
+            # 从executable路径中提取项目路径
+            if "KSX门店管理系统" in str(executable_path):
+                # 如果路径中包含应用名称，尝试找到dist目录
+                parts = executable_path.parts
+                for i, part in enumerate(parts):
+                    if part == "dist":
+                        dist_dir = Path(*parts[:i+1])
+                        app_name = "KSX门店管理系统.app"
+                        app_dir = dist_dir / app_name
+                        if app_dir.exists():
+                            database_dir = app_dir / "database"
+                            print(f"🔍 调试：使用固定dist路径: {database_dir}")
+                            break
+                else:
+                    # 如果找不到dist目录，使用用户目录作为备用
+                    database_dir = Path.home() / "KSX_Database"
+                    print(f"🔍 调试：找不到dist目录，使用用户目录: {database_dir}")
+            else:
+                # 如果路径中不包含应用名称，使用用户目录
+                database_dir = Path.home() / "KSX_Database"
+                print(f"🔍 调试：路径中不包含应用名称，使用用户目录: {database_dir}")
+        
+        return str(database_dir)
     else:
         # 开发环境
         current_file = Path(__file__).resolve()
@@ -43,7 +106,24 @@ class DatabaseManager:
             base_dir = get_database_dir()
         
         self.base_dir = Path(base_dir)
-        self.base_dir.mkdir(exist_ok=True)
+        print(f"🔍 调试：尝试创建数据库目录: {self.base_dir}")
+        
+        try:
+            self.base_dir.mkdir(parents=True, exist_ok=True)
+            print(f"✅ 数据库目录创建成功: {self.base_dir}")
+        except Exception as e:
+            print(f"❌ 数据库目录创建失败: {e}")
+            # 如果创建失败，尝试使用用户目录
+            import os
+            fallback_dir = Path.home() / "KSX_Database"
+            print(f"🔍 调试：尝试使用备用目录: {fallback_dir}")
+            try:
+                fallback_dir.mkdir(parents=True, exist_ok=True)
+                self.base_dir = fallback_dir
+                print(f"✅ 备用数据库目录创建成功: {self.base_dir}")
+            except Exception as e2:
+                print(f"❌ 备用数据库目录也创建失败: {e2}")
+                raise e2
         
         # 调试：记录base_dir路径
         logger.info(f"DatabaseManager初始化: base_dir = {self.base_dir}")
@@ -196,12 +276,17 @@ class DatabaseManager:
         db_path = self.get_database_path(date)
         
         try:
+            logger.info(f"🔍 调试：开始创建数据库: {db_path}")
+            print(f"🔍 调试：开始创建数据库: {db_path}")
+            
             # 创建数据库连接
             conn = sqlite3.connect(str(db_path))
             cursor = conn.cursor()
             
             # 创建表
             create_sql = self._generate_create_table_sql()
+            logger.info(f"🔍 调试：执行创建表SQL: {create_sql[:200]}...")
+            print(f"🔍 调试：执行创建表SQL: {create_sql[:200]}...")
             cursor.execute(create_sql)
             
             # 创建索引
@@ -212,7 +297,8 @@ class DatabaseManager:
             conn.commit()
             conn.close()
             
-            logger.info(f"数据库创建成功: {db_path}")
+            logger.info(f"✅ 数据库创建成功: {db_path}")
+            print(f"✅ 数据库创建成功: {db_path}")
             return str(db_path)
             
         except Exception as e:
@@ -235,10 +321,17 @@ class DatabaseManager:
             return 0
             
         db_path = self.get_database_path(date)
+        logger.info(f"🔍 调试：数据库路径: {db_path}")
+        print(f"🔍 调试：数据库路径: {db_path}")
         
         # 如果数据库不存在，先创建
         if not db_path.exists():
+            logger.info(f"🔍 调试：数据库不存在，开始创建: {db_path}")
+            print(f"🔍 调试：数据库不存在，开始创建: {db_path}")
             self.create_database(date)
+        else:
+            logger.info(f"🔍 调试：数据库已存在: {db_path}")
+            print(f"🔍 调试：数据库已存在: {db_path}")
         
         try:
             conn = sqlite3.connect(str(db_path))
@@ -291,6 +384,10 @@ class DatabaseManager:
             
         except Exception as e:
             logger.error(f"插入数据失败: {e}")
+            import traceback
+            logger.error(f"详细错误信息: {traceback.format_exc()}")
+            print(f"❌ 数据库插入失败: {e}")
+            print(f"❌ 详细错误信息: {traceback.format_exc()}")
             raise
     
     def query_data(self, 

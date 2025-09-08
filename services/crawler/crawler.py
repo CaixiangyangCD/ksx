@@ -8,12 +8,37 @@ KSX网站爬虫模块 - API版本
 import asyncio
 import json
 import csv
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Dict, Any, List
-from playwright.async_api import async_playwright, Browser, Page, BrowserContext, Response
-from playwright.async_api import TimeoutError as PlaywrightTimeoutError
-from loguru import logger
+from typing import Optional, Dict, Any
+# 尝试导入Playwright，如果失败则提供友好的错误信息
+try:
+    from playwright.async_api import async_playwright, Browser, Page, BrowserContext, Response
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError as e:
+    print(f"警告: Playwright模块导入失败: {e}")
+    print("在打包环境中，请确保Playwright已正确安装")
+    PLAYWRIGHT_AVAILABLE = False
+    # 创建占位符类以避免后续错误
+    class MockPlaywright:
+        def __init__(self, *args, **kwargs):
+            raise ImportError("Playwright不可用，请检查安装")
+    
+    async_playwright = MockPlaywright
+    Browser = Page = BrowserContext = Response = MockPlaywright
+    PlaywrightTimeoutError = Exception
+# 尝试导入loguru，如果失败则使用标准logging
+try:
+    from loguru import logger
+    LOGGER_AVAILABLE = True
+except ImportError:
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    LOGGER_AVAILABLE = False
+    print("警告: loguru不可用，使用标准logging模块")
 import sys
 import os
 
@@ -26,6 +51,11 @@ os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browser_path
 def ensure_browser_environment():
     """确保浏览器环境已正确设置"""
     try:
+        # 检查Playwright是否可用
+        if not PLAYWRIGHT_AVAILABLE:
+            print("Playwright不可用，尝试自动安装...")
+            return install_playwright_if_needed()
+        
         from services.browser_manager import setup_browser_environment
         if not setup_browser_environment(project_root):
             logger.error("浏览器环境设置失败")
@@ -33,6 +63,42 @@ def ensure_browser_environment():
         return True
     except Exception as e:
         logger.error(f"设置浏览器环境时发生错误: {e}")
+        return False
+
+def install_playwright_if_needed():
+    """如果需要，自动安装Playwright"""
+    try:
+        print("正在尝试安装Playwright...")
+        
+        # 尝试安装Playwright
+        result = subprocess.run([
+            sys.executable, "-m", "pip", "install", "playwright"
+        ], capture_output=True, text=True, timeout=300)
+        
+        if result.returncode == 0:
+            print("✓ Playwright安装成功")
+            
+            # 安装浏览器
+            browser_path = os.path.join(project_root, "playwright-browsers")
+            os.makedirs(browser_path, exist_ok=True)
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browser_path
+            
+            browser_result = subprocess.run([
+                sys.executable, "-m", "playwright", "install", "chromium"
+            ], capture_output=True, text=True, timeout=600, env=os.environ.copy())
+            
+            if browser_result.returncode == 0:
+                print("✓ Playwright浏览器安装成功")
+                return True
+            else:
+                print(f"✗ Playwright浏览器安装失败: {browser_result.stderr}")
+                return False
+        else:
+            print(f"✗ Playwright安装失败: {result.stderr}")
+            return False
+            
+    except Exception as e:
+        print(f"✗ Playwright自动安装失败: {e}")
         return False
 
 # 在导入时自动检查浏览器环境
@@ -59,6 +125,22 @@ class KSXCrawler:
             timeout: 超时时间（毫秒），如果为None则从配置文件读取
             target_date: 目标日期 (YYYY-MM-DD)，如果为None则使用默认日期
         """
+        # 声明全局变量
+        global async_playwright, Browser, Page, BrowserContext, Response, PlaywrightTimeoutError, PLAYWRIGHT_AVAILABLE
+        
+        # 检查Playwright是否可用，如果不可用则尝试安装
+        if not PLAYWRIGHT_AVAILABLE:
+            print("警告: Playwright模块不可用，尝试动态安装...")
+            try:
+                self._install_playwright_if_needed()
+                # 重新尝试导入
+                from playwright.async_api import async_playwright, Browser, Page, BrowserContext, Response
+                from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+                PLAYWRIGHT_AVAILABLE = True
+                print("Playwright安装成功，可以继续运行爬虫")
+            except Exception as e:
+                print(f"Playwright安装失败: {e}")
+                raise ImportError("Playwright模块不可用且无法自动安装，无法运行爬虫。")
         self.headless = headless
         self.target_date = target_date
         
@@ -101,32 +183,117 @@ class KSXCrawler:
         self.page_info = None
         
     def _setup_logging(self):
-        """配置日志系统 - 使用loguru"""
-        # 清除默认的logger
-        logger.remove()
-        
-        # 添加控制台输出
-        logger.add(
-            sys.stderr,
-            format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-            level="INFO"
-        )
-        
-        # 添加文件输出，按日期轮转，保留近30天
-        logger.add(
-            "logs/crawler_{time:YYYY-MM-DD}.log",
-            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-            level="DEBUG",
-            rotation="1 day",
-            retention="30 days",
-            compression="zip",
-            encoding="utf-8"
-        )
-        
-        # 创建logs目录
-        Path("logs").mkdir(exist_ok=True)
-        
-        self.logger = logger
+        """配置日志系统 - 使用loguru或标准logging"""
+        if LOGGER_AVAILABLE:
+            # 使用loguru
+            # 清除默认的logger
+            logger.remove()
+            
+            # 添加控制台输出
+            logger.add(
+                sys.stderr,
+                format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+                level="INFO"
+            )
+            
+            # 添加文件输出，按日期轮转，保留近30天
+            logger.add(
+                "logs/crawler_{time:YYYY-MM-DD}.log",
+                format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+                level="DEBUG",
+                rotation="1 day",
+                retention="30 days",
+                compression="zip",
+                encoding="utf-8"
+            )
+            
+            self.logger = logger
+        else:
+            # 使用标准logging
+            self.logger = logger
+            # 创建logs目录
+            Path("logs").mkdir(exist_ok=True)
+            
+            # 配置文件处理器
+            file_handler = logging.FileHandler("logs/crawler.log", encoding="utf-8")
+            file_handler.setLevel(logging.DEBUG)
+            file_formatter = logging.Formatter("%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s")
+            file_handler.setFormatter(file_formatter)
+            
+            # 配置控制台处理器
+            console_handler = logging.StreamHandler(sys.stderr)
+            console_handler.setLevel(logging.INFO)
+            console_formatter = logging.Formatter("%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s")
+            console_handler.setFormatter(console_formatter)
+            
+            # 添加处理器
+            self.logger.addHandler(file_handler)
+            self.logger.addHandler(console_handler)
+            self.logger.setLevel(logging.DEBUG)
+    
+    def _install_playwright_if_needed(self):
+        """在打包环境中动态安装Playwright"""
+        try:
+            print("正在尝试安装Playwright...")
+            # 首先尝试使用uv安装
+            try:
+                result = subprocess.run([
+                    "uv", "add", "playwright"
+                ], capture_output=True, text=True, timeout=300)
+                
+                if result.returncode == 0:
+                    print("使用uv安装Playwright成功")
+                else:
+                    print(f"uv安装失败，尝试使用pip: {result.stderr}")
+                    raise Exception("uv安装失败")
+                    
+            except Exception:
+                # 如果uv失败，使用pip
+                print("尝试使用pip安装Playwright...")
+                
+                # 检查Python版本，决定是否使用--break-system-packages
+                import sys
+                python_version = sys.version_info
+                if python_version >= (3, 11):
+                    # Python 3.11+ 支持 --break-system-packages
+                    cmd = [sys.executable, "-m", "pip", "install", "playwright", "--break-system-packages"]
+                else:
+                    # Python 3.9-3.10 不支持 --break-system-packages
+                    cmd = [sys.executable, "-m", "pip", "install", "playwright", "--user"]
+                
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                
+                if result.returncode != 0:
+                    print(f"Playwright安装失败: {result.stderr}")
+                    # 如果--user也失败，尝试不使用任何额外参数
+                    print("尝试不使用额外参数安装...")
+                    result = subprocess.run([
+                        sys.executable, "-m", "pip", "install", "playwright"
+                    ], capture_output=True, text=True, timeout=300)
+                    
+                    if result.returncode != 0:
+                        raise Exception(f"安装失败: {result.stderr}")
+                    else:
+                        print("使用pip安装Playwright成功（无额外参数）")
+                else:
+                    print("使用pip安装Playwright成功")
+            
+            # 安装浏览器
+            print("正在安装Playwright浏览器...")
+            browser_result = subprocess.run([
+                sys.executable, "-m", "playwright", "install", "chromium"
+            ], capture_output=True, text=True, timeout=600)
+            
+            if browser_result.returncode == 0:
+                print("Playwright浏览器安装成功")
+            else:
+                print(f"浏览器安装失败: {browser_result.stderr}")
+                # 浏览器安装失败不是致命错误，继续执行
+                
+        except subprocess.TimeoutExpired:
+            raise Exception("安装超时")
+        except Exception as e:
+            raise Exception(f"安装过程中出现错误: {e}")
     
     async def _setup_request_interception(self):
         """设置网络请求拦截"""
@@ -191,25 +358,104 @@ class KSXCrawler:
     async def start_browser(self):
         """启动浏览器"""
         try:
+            print(f"🔍 调试：开始启动浏览器，无头模式: {self.headless}")
+            
             # 确保正确初始化 playwright
             self.playwright = await async_playwright().start()
             if not self.playwright:
                 raise Exception("Playwright 初始化失败")
+            print("✓ Playwright初始化成功")
             
-            # 启动浏览器 - 使用Chrome Beta
-            self.browser = await self.playwright.chromium.launch(
-                headless=self.headless,
-                channel="chrome-beta",  # 使用Chrome Beta
-                args=[
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-accelerated-2d-canvas',
-                    '--no-first-run',
-                    '--no-zygote',
-                    '--disable-gpu'
-                ]
-            )
+            # 启动浏览器 - 根据模式选择不同的浏览器
+            if self.headless:
+                print("🔍 调试：尝试启动无头模式浏览器...")
+                # 无头模式使用Playwright自带的Chromium
+                try:
+                    self.browser = await self.playwright.chromium.launch(
+                        headless=True,
+                        args=[
+                            '--no-sandbox',
+                            '--disable-setuid-sandbox',
+                            '--disable-dev-shm-usage',
+                            '--disable-accelerated-2d-canvas',
+                            '--no-first-run',
+                            '--no-zygote',
+                            '--disable-gpu'
+                        ]
+                    )
+                    print("✓ 无头模式浏览器启动成功")
+                except Exception as e:
+                    print(f"❌ 无头模式浏览器启动失败: {e}")
+                    # 尝试自动安装浏览器
+                    print("🔧 尝试自动安装Playwright浏览器...")
+                    try:
+                        import subprocess
+                        # 创建环境变量，禁用代理
+                        env = os.environ.copy()
+                        env.pop('http_proxy', None)
+                        env.pop('https_proxy', None)
+                        env.pop('HTTP_PROXY', None)
+                        env.pop('HTTPS_PROXY', None)
+                        env.pop('ALL_PROXY', None)
+                        env.pop('all_proxy', None)
+                        
+                        result = subprocess.run([
+                            sys.executable, "-m", "playwright", "install", "chromium"
+                        ], capture_output=True, text=True, timeout=300, env=env)
+                        if result.returncode == 0:
+                            print("✓ Playwright浏览器安装成功，重新尝试启动...")
+                            self.browser = await self.playwright.chromium.launch(
+                                headless=True,
+                                args=[
+                                    '--no-sandbox',
+                                    '--disable-setuid-sandbox',
+                                    '--disable-dev-shm-usage',
+                                    '--disable-accelerated-2d-canvas',
+                                    '--no-first-run',
+                                    '--no-zygote',
+                                    '--disable-gpu'
+                                ]
+                            )
+                            print("✓ 浏览器重新启动成功")
+                        else:
+                            print(f"❌ 浏览器安装失败: {result.stderr}")
+                            raise Exception(f"浏览器安装失败: {result.stderr}")
+                    except Exception as install_error:
+                        print(f"❌ 浏览器安装过程出错: {install_error}")
+                        raise Exception(f"浏览器启动失败: {e}, 安装失败: {install_error}")
+            else:
+                print("🔍 调试：尝试启动有头模式浏览器...")
+                # 有头模式尝试使用Chrome Beta，如果失败则使用Chromium
+                try:
+                    self.browser = await self.playwright.chromium.launch(
+                        headless=False,
+                        channel="chrome-beta",  # 使用Chrome Beta
+                        args=[
+                            '--no-sandbox',
+                            '--disable-setuid-sandbox',
+                            '--disable-dev-shm-usage',
+                            '--disable-accelerated-2d-canvas',
+                            '--no-first-run',
+                            '--no-zygote',
+                            '--disable-gpu'
+                        ]
+                    )
+                    print("✓ Chrome Beta启动成功")
+                except Exception as e:
+                    print(f"Chrome Beta启动失败，使用Chromium: {e}")
+                    self.browser = await self.playwright.chromium.launch(
+                        headless=False,
+                        args=[
+                            '--no-sandbox',
+                            '--disable-setuid-sandbox',
+                            '--disable-dev-shm-usage',
+                            '--disable-accelerated-2d-canvas',
+                            '--no-first-run',
+                            '--no-zygote',
+                            '--disable-gpu'
+                        ]
+                    )
+                    print("✓ Chromium启动成功")
             
             if not self.browser:
                 raise Exception("浏览器启动失败")
@@ -489,6 +735,7 @@ class KSXCrawler:
         """使用API数据提取所有页面数据"""
         try:
             self.logger.info("🚀 开始基于API的数据提取...")
+            print("🚀 开始基于API的数据提取...")
             all_data = []
             current_page = 1
             total_pages = 0
@@ -833,12 +1080,22 @@ class KSXCrawler:
             
             # 数据去重（基于ID字段）
             unique_data = await self.deduplicate_data(all_data)
+            self.logger.info(f"🔍 去重后数据量: {len(unique_data)} 条")
+            print(f"🔍 去重后数据量: {len(unique_data)} 条")
             
             # 保存到数据库
+            self.logger.info("💾 开始保存数据到数据库...")
+            print("💾 开始保存数据到数据库...")
             db_result = await self.save_to_database(unique_data)
+            self.logger.info(f"💾 数据库保存结果: {db_result} 条记录")
+            print(f"💾 数据库保存结果: {db_result} 条记录")
             
             # 同步门店到配置数据库
+            self.logger.info("🏪 开始同步门店到配置数据库...")
+            print("🏪 开始同步门店到配置数据库...")
             await self.sync_stores_to_config(unique_data)
+            self.logger.info("🏪 门店同步完成")
+            print("🏪 门店同步完成")
             
             # 可选：保存到CSV文件作为备份（已注释，留作备用）
             # csv_file = await self.save_api_data_to_csv(unique_data)
@@ -881,6 +1138,13 @@ class KSXCrawler:
             self.logger.info(f"📊 准备保存 {len(data)} 条记录到数据库（日期: {yesterday.strftime('%Y-%m-%d')}）")
             print(f"📊 准备保存 {len(data)} 条记录到数据库（日期: {yesterday.strftime('%Y-%m-%d')}）")
             
+            # 调试：打印第一条数据的结构
+            if data and len(data) > 0:
+                self.logger.info(f"🔍 调试：第一条数据的字段: {list(data[0].keys())}")
+                print(f"🔍 调试：第一条数据的字段: {list(data[0].keys())}")
+                self.logger.info(f"🔍 调试：第一条数据内容: {data[0]}")
+                print(f"🔍 调试：第一条数据内容: {data[0]}")
+            
             inserted_count = db_manager.insert_data(data, date=yesterday)
             
             self.logger.info(f"✅ 成功保存 {inserted_count} 条记录到数据库（日期: {yesterday.strftime('%Y-%m-%d')}）")
@@ -893,6 +1157,10 @@ class KSXCrawler:
             
         except Exception as e:
             self.logger.error(f"❌ 保存到数据库失败: {e}")
+            print(f"❌ 保存到数据库失败: {e}")
+            import traceback
+            self.logger.error(f"❌ 详细错误信息: {traceback.format_exc()}")
+            print(f"❌ 详细错误信息: {traceback.format_exc()}")
             return 0
     
     async def deduplicate_data(self, data: list) -> list:

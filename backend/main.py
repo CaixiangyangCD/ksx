@@ -784,7 +784,9 @@ async def export_excel(export_config: dict = {}):
         # 生成文件名（基于字段配置的哈希值，确保相同配置使用相同文件名）
         import hashlib
         fields_hash = hashlib.md5(''.join(sorted(selected_fields)).encode()).hexdigest()[:8]
-        filename = f"ksx_excel_export_{rule_name}_{fields_hash}.xlsx"
+        # 获取当前日期，格式化为YY_MM
+        current_date = datetime.now().strftime("%y_%m")
+        filename = f"ksx_{current_date}_{fields_hash}.xlsx"
         
         # 生成Excel内容（支持增量更新）
         excel_content = create_incremental_excel(monthly_data, selected_fields, rule_name, filename)

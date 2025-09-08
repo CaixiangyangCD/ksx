@@ -387,40 +387,84 @@ class KSXDesktopApp(QMainWindow):
     
     def perform_startup_check(self):
         """执行启动检查"""
-        # 创建进度对话框
-        self.progress_dialog = QProgressDialog("正在检查系统环境...", "取消", 0, 0, self)
-        self.progress_dialog.setWindowTitle("系统检查")
-        self.progress_dialog.setWindowModality(Qt.WindowModal)
-        self.progress_dialog.setCancelButton(None)  # 禁用取消按钮
-        self.progress_dialog.show()
+        # 简化启动检查，直接启动服务
+        print("跳过复杂的启动检查，直接启动服务...")
         
-        # 先清理可能被占用的端口
+        # 检查Playwright环境
+        self.check_playwright_environment()
+        
+        # 简单清理端口
         self.cleanup_startup_ports()
         
-        # 创建启动检查线程
-        self.startup_check_thread = StartupCheckThread()
-        self.startup_check_thread.check_progress.connect(self.on_check_progress)
-        self.startup_check_thread.check_completed.connect(self.on_check_completed)
-        self.startup_check_thread.start()
+        # 直接启动后端和前端服务
+        self.start_fastapi_server()
+        project_root = get_project_root()
+        dist_path = os.path.join(project_root, 'frontend', 'dist')
+        self.start_frontend_server(dist_path)
+    
+    def check_playwright_environment(self):
+        """检查Playwright环境"""
+        try:
+            print("🔍 检查Playwright环境...")
+            
+            # 尝试导入Playwright
+            try:
+                import playwright
+                print("✓ Playwright模块已安装")
+            except ImportError:
+                print("⚠️ Playwright模块未安装，将在需要时自动安装")
+                return
+            
+            # 设置浏览器路径
+            project_root = get_project_root()
+            browser_path = os.path.join(project_root, "playwright-browsers")
+            os.makedirs(browser_path, exist_ok=True)
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browser_path
+            
+            # 检查浏览器是否已安装
+            chromium_path = os.path.join(browser_path, "chromium-1091", "chrome-mac", "Chromium.app")
+            if not os.path.exists(chromium_path):
+                print("⚠️ Playwright浏览器未安装，将在首次使用时自动安装")
+            else:
+                print("✓ Playwright浏览器已安装")
+                
+        except Exception as e:
+            print(f"⚠️ Playwright环境检查失败: {e}")
+            print("将在首次使用时自动处理")
     
     def cleanup_startup_ports(self):
         """启动时清理可能被占用的端口"""
         try:
             print("正在清理启动时的端口占用...")
             
-            # 清理后端API端口
-            if self.is_port_in_use(18888):
-                print("检测到18888端口被占用，正在清理...")
-                self.force_cleanup_ports()
-            
-            # 清理前端服务端口（如果有的话）
-            if self.is_port_in_use(3000):
-                print("检测到3000端口被占用，正在清理...")
-                self.force_cleanup_ports()
-                
+            # 只清理必要的端口，避免过度清理
+            ports_to_check = [18888, 18889, 18890, 18891, 18892]
+            for port in ports_to_check:
+                if self.is_port_in_use(port):
+                    print(f"检测到端口 {port} 被占用，尝试清理...")
+                    self.cleanup_single_port(port)
+                    
             print("启动端口清理完成")
         except Exception as e:
             print(f"启动端口清理失败: {e}")
+    
+    def cleanup_single_port(self, port):
+        """清理单个端口"""
+        try:
+            current_pid = os.getpid()
+            result = subprocess.run(['lsof', '-ti', f':{port}'], 
+                                  capture_output=True, text=True, timeout=3)
+            if result.returncode == 0 and result.stdout.strip():
+                pids = result.stdout.strip().split('\n')
+                for pid in pids:
+                    if pid.strip() and pid.strip() != str(current_pid):
+                        try:
+                            print(f"清理端口 {port} 的进程 {pid}")
+                            subprocess.run(['kill', '-9', pid], timeout=2)
+                        except Exception as e:
+                            print(f"清理进程 {pid} 失败: {e}")
+        except Exception as e:
+            print(f"清理端口 {port} 失败: {e}")
     
     def is_port_in_use(self, port):
         """检查端口是否被占用"""
@@ -433,41 +477,21 @@ class KSXDesktopApp(QMainWindow):
             return False
     
     def on_check_progress(self, message):
-        """更新检查进度"""
-        if self.progress_dialog:
-            self.progress_dialog.setLabelText(message)
-            QApplication.processEvents()
+        """更新检查进度（已弃用，保留兼容性）"""
+        # 这个方法已经不再使用，因为启动检查已经简化
+        print(f"检查进度: {message}")
     
     def on_check_completed(self, success):
-        """检查完成回调"""
-        if self.progress_dialog:
-            self.progress_dialog.close()
-            self.progress_dialog = None
-        
-        if success:
-            # 启动后端和前端服务
-            self.start_fastapi_server()
-            project_root = get_project_root()
-            dist_path = os.path.join(project_root, 'frontend', 'dist')
-            self.start_frontend_server(dist_path)
-        else:
-            # 显示错误信息
-            QMessageBox.critical(
-                self, 
-                "启动失败", 
-                "系统环境检查失败，请检查错误信息或联系技术支持。"
-            )
-            self.close()
+        """检查完成回调（已弃用，保留兼容性）"""
+        # 这个方法已经不再使用，因为启动检查已经简化
+        pass
         
     def init_ui(self):
         """初始化用户界面"""
         self.setWindowTitle("KSX门店管理系统")
         self.setGeometry(100, 100, 1400, 900)
         
-        # 设置应用图标
-        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app_icon.png')
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
+        # 不设置应用图标，保持简洁
         
         # 创建中央部件
         central_widget = QWidget()
@@ -526,7 +550,7 @@ class KSXDesktopApp(QMainWindow):
         layout.setSpacing(20)
         
         # 标题
-        title_label = QLabel("🚀 KSX门店管理系统")
+        title_label = QLabel("KSX门店管理系统")
         title_font = QFont()
         title_font.setPointSize(16)
         title_font.setBold(True)
@@ -830,26 +854,16 @@ class KSXDesktopApp(QMainWindow):
         print("所有服务已停止")
     
     def force_cleanup_ports(self):
-        """强制清理端口占用 - 简单粗暴的方法"""
+        """强制清理端口占用 - 简化版本"""
         try:
             current_pid = os.getpid()
             print(f"当前进程PID: {current_pid}")
             
-            # 清理所有可能的端口
-            ports_to_clean = [18888, 18889, 18890, 18891, 18892, 3000]
+            # 只清理必要的端口，避免过度清理
+            ports_to_clean = [18888, 18889, 18890, 18891, 18892]
             
             for port in ports_to_clean:
-                result = subprocess.run(['lsof', '-ti', f':{port}'], 
-                                      capture_output=True, text=True, timeout=5)
-                if result.returncode == 0 and result.stdout.strip():
-                    pids = result.stdout.strip().split('\n')
-                    for pid in pids:
-                        if pid.strip() and pid.strip() != str(current_pid):
-                            try:
-                                print(f"强制杀死进程 {pid} (占用端口 {port})")
-                                subprocess.run(['kill', '-9', pid], timeout=3)
-                            except Exception as e:
-                                print(f"杀死进程 {pid} 失败: {e}")
+                self.cleanup_single_port(port)
                             
             print("端口清理完成")
         except Exception as e:
@@ -902,26 +916,29 @@ def check_dependencies():
 main_window = None
 
 def force_cleanup_ports_standalone():
-    """独立的端口清理函数"""
+    """独立的端口清理函数 - 简化版本"""
     try:
         current_pid = os.getpid()
         print(f"正在强制清理端口占用... (当前进程PID: {current_pid})")
         
-        # 清理所有可能的端口
-        ports_to_clean = [18888, 18889, 18890, 18891, 18892, 3000]
+        # 只清理必要的端口
+        ports_to_clean = [18888, 18889, 18890, 18891, 18892]
         
         for port in ports_to_clean:
-            result = subprocess.run(['lsof', '-ti', f':{port}'], 
-                                  capture_output=True, text=True, timeout=5)
-            if result.returncode == 0 and result.stdout.strip():
-                pids = result.stdout.strip().split('\n')
-                for pid in pids:
-                    if pid.strip() and pid.strip() != str(current_pid):
-                        try:
-                            print(f"强制杀死进程 {pid} (占用端口 {port})")
-                            subprocess.run(['kill', '-9', pid], timeout=3)
-                        except Exception as e:
-                            print(f"杀死进程 {pid} 失败: {e}")
+            try:
+                result = subprocess.run(['lsof', '-ti', f':{port}'], 
+                                      capture_output=True, text=True, timeout=3)
+                if result.returncode == 0 and result.stdout.strip():
+                    pids = result.stdout.strip().split('\n')
+                    for pid in pids:
+                        if pid.strip() and pid.strip() != str(current_pid):
+                            try:
+                                print(f"清理端口 {port} 的进程 {pid}")
+                                subprocess.run(['kill', '-9', pid], timeout=2)
+                            except Exception as e:
+                                print(f"清理进程 {pid} 失败: {e}")
+            except Exception as e:
+                print(f"清理端口 {port} 失败: {e}")
                         
         print("端口清理完成")
     except Exception as e:
@@ -957,6 +974,10 @@ def main():
     
     # 注册退出时清理函数
     atexit.register(cleanup_services)
+    
+    # 设置环境变量以避免图形问题
+    os.environ["QT_MAC_WANTS_LAYER"] = "1"
+    os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
     
     # 检查依赖
     if not check_dependencies():

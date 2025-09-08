@@ -8,7 +8,16 @@ from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
 import sys
 import os
-from loguru import logger
+# 尝试导入loguru，如果失败则使用标准logging
+try:
+    from loguru import logger
+    LOGGER_AVAILABLE = True
+except ImportError:
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    LOGGER_AVAILABLE = False
+    print("警告: loguru不可用，使用标准logging模块")
 from datetime import datetime, timedelta
 import re
 

@@ -22,8 +22,17 @@ def get_app_data_dir():
     """获取应用数据目录，支持打包后的应用"""
     if getattr(sys, 'frozen', False):
         # PyInstaller打包后的情况
-        app_dir = os.path.dirname(sys.executable)
-        return os.path.join(app_dir, "data")
+        # 从可执行文件路径找到dist目录
+        executable_path = sys.executable
+        if "KSX门店管理系统" in executable_path:
+            # 找到dist目录
+            parts = executable_path.split(os.sep)
+            for i, part in enumerate(parts):
+                if part == "dist":
+                    dist_dir = os.sep.join(parts[:i+1])
+                    return os.path.join(dist_dir, "data")
+        # 如果找不到dist目录，使用默认路径
+        return os.path.join(os.path.dirname(sys.executable), "data")
     else:
         # 开发环境
         return os.path.join(project_root, "backend", "exports")
@@ -300,7 +309,9 @@ async def export_excel(export_config: dict = {}):
         
         # 生成文件名（基于字段配置的哈希值，确保相同配置使用相同文件名）
         fields_hash = hashlib.md5(''.join(sorted(selected_fields)).encode()).hexdigest()[:8]
-        filename = f"ksx_excel_export_{rule_name}_{fields_hash}.xlsx"
+        # 获取当前日期，格式化为YY_MM
+        current_date = datetime.now().strftime("%y_%m")
+        filename = f"ksx_{current_date}_{fields_hash}.xlsx"
         
         # 确保导出目录存在
         export_dir = get_app_data_dir()

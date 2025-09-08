@@ -10,14 +10,34 @@ import os
 import sys
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-from loguru import logger
+# 尝试导入loguru，如果失败则使用标准logging
+try:
+    from loguru import logger
+    LOGGER_AVAILABLE = True
+except ImportError:
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    LOGGER_AVAILABLE = False
+    print("警告: loguru不可用，使用标准logging模块")
 
 def get_config_db_path():
     """获取配置数据库路径，支持打包后的应用"""
     if getattr(sys, 'frozen', False):
         # PyInstaller打包后的情况
-        app_dir = os.path.dirname(sys.executable)
-        return os.path.join(app_dir, "database", "config.db")
+        # 在macOS中，应用的实际路径是.app/Contents/MacOS/
+        # 我们需要找到.app的根目录
+        from pathlib import Path
+        executable_path = Path(sys.executable)
+        if executable_path.name.endswith('.app'):
+            # 如果executable本身就是.app
+            app_dir = executable_path
+        else:
+            # 如果executable在.app/Contents/MacOS/中
+            app_dir = executable_path.parent.parent.parent
+        
+        config_db_path = app_dir / "database" / "config.db"
+        return str(config_db_path)
     else:
         # 开发环境
         current_file = os.path.dirname(os.path.abspath(__file__))

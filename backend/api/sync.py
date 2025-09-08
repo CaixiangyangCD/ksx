@@ -8,7 +8,16 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 import sys
 import os
 import asyncio
-from loguru import logger
+# 尝试导入loguru，如果失败则使用标准logging
+try:
+    from loguru import logger
+    LOGGER_AVAILABLE = True
+except ImportError:
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    LOGGER_AVAILABLE = False
+    print("警告: loguru不可用，使用标准logging模块")
 
 # 添加项目根目录到路径
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -30,8 +39,19 @@ async def run_crawler(target_date: str = None):
         # 构建爬虫命令
         crawler_script = os.path.join(project_root, "services", "crawler", "main.py")
         
-        # 使用uv运行爬虫
-        cmd = ["uv", "run", "python", crawler_script]
+        # 在打包环境中直接使用Python，开发环境使用uv
+        if getattr(sys, 'frozen', False):
+            # 打包环境：使用系统Python
+            import shutil
+            python_path = shutil.which('python3') or shutil.which('python')
+            if python_path:
+                cmd = [python_path, crawler_script]
+            else:
+                # 如果找不到Python，尝试使用uv
+                cmd = ["uv", "run", "python", crawler_script]
+        else:
+            # 开发环境：使用uv
+            cmd = ["uv", "run", "python", crawler_script]
         
         # 如果指定了日期，添加日期参数
         if target_date:
@@ -39,12 +59,21 @@ async def run_crawler(target_date: str = None):
         
         logger.info(f"执行命令: {' '.join(cmd)}")
         
+        # 设置环境变量，让爬虫使用正确的数据库目录
+        env = os.environ.copy()
+        # 获取主应用的数据库目录
+        from services.database_manager import get_database_dir
+        main_db_dir = get_database_dir()
+        env['KSX_DATABASE_DIR'] = main_db_dir
+        logger.info(f"设置爬虫数据库目录环境变量: {main_db_dir}")
+        
         # 运行爬虫程序
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=project_root
+            cwd=project_root,
+            env=env
         )
         
         # 等待进程完成

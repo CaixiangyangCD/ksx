@@ -25,7 +25,7 @@ LOGIN_CONFIG = {
 
 # 浏览器配置
 BROWSER_CONFIG = {
-    'headless': False,  # 是否无头模式
+    'headless': True,  # 是否无头模式
     'browser_path': '../playwright-config/browsers',  # 自定义浏览器安装路径
     'viewport': {
         'width': 1920,

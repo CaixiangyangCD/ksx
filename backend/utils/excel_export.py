@@ -21,8 +21,17 @@ def get_excel_export_dir():
     """获取Excel导出目录，支持打包后的应用"""
     if getattr(sys, 'frozen', False):
         # PyInstaller打包后的情况
-        app_dir = os.path.dirname(sys.executable)
-        return os.path.join(app_dir, "data")
+        # 从可执行文件路径找到dist目录
+        executable_path = sys.executable
+        if "KSX门店管理系统" in executable_path:
+            # 找到dist目录
+            parts = executable_path.split(os.sep)
+            for i, part in enumerate(parts):
+                if part == "dist":
+                    dist_dir = os.sep.join(parts[:i+1])
+                    return os.path.join(dist_dir, "data")
+        # 如果找不到dist目录，使用默认路径
+        return os.path.join(os.path.dirname(sys.executable), "data")
     else:
         # 开发环境
         current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
