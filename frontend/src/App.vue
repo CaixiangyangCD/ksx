@@ -14,8 +14,10 @@
           <ActionBar
             :total="pagination.total"
             :sync-loading="syncLoading"
+            :batch-sync-loading="batchSyncLoading"
             :has-data="tableData.length > 0"
             @sync="handleSyncData"
+            @batchSync="showBatchSyncModalHandler"
             @config="showStoreConfig"
             @fieldConfig="showFieldConfig"
             @export="exportData"
@@ -86,6 +88,101 @@
         </div>
       </a-modal>
 
+      <!-- 范围同步数据Modal -->
+      <a-modal
+        v-model:open="showBatchSyncModal"
+        title="范围同步数据"
+        :width="700"
+        @ok="handleBatchSyncConfirm"
+        @cancel="showBatchSyncModal = false"
+        :confirm-loading="batchSyncLoading"
+        ok-text="确认开始同步"
+        cancel-text="取消"
+      >
+        <div class="batch-sync-modal-content">
+          <p style="margin-bottom: 16px; color: #666">
+            选择要同步数据的日期范围，系统将在后台启动爬虫程序获取指定日期范围内的所有业务数据。
+          </p>
+          
+          <!-- 日期范围预览 -->
+          <div v-if="batchStartDate && batchEndDate" style="margin-bottom: 16px; padding: 12px; background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 6px;">
+            <div style="display: flex; align-items: center; margin-bottom: 8px;">
+              <CalendarOutlined style="color: #52c41a; margin-right: 8px;" />
+              <span style="font-weight: 500; color: #389e0d;">同步日期范围预览</span>
+            </div>
+            <div style="color: #52c41a; font-size: 14px;">
+              <div>开始日期：{{ batchStartDate.format('YYYY年MM月DD日') }}</div>
+              <div>结束日期：{{ batchEndDate.format('YYYY年MM月DD日') }}</div>
+              <div style="margin-top: 4px; font-weight: 500;">
+                共 {{ batchEndDate.diff(batchStartDate, 'day') + 1 }} 天的数据
+              </div>
+            </div>
+          </div>
+          <div class="date-range-container">
+            <div style="display: flex; gap: 16px; align-items: center;">
+              <div style="flex: 1;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 500"
+                  >开始日期：</label
+                >
+                <a-date-picker
+                  v-model:value="batchStartDate"
+                  :disabled-date="disabledDate"
+                  placeholder="请选择开始日期"
+                  style="width: 100%"
+                  format="YYYY-MM-DD"
+                />
+              </div>
+              <div style="flex: 1;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 500"
+                  >结束日期：</label
+                >
+                <a-date-picker
+                  v-model:value="batchEndDate"
+                  :disabled-date="disabledDate"
+                  placeholder="请选择结束日期（可选）"
+                  style="width: 100%"
+                  format="YYYY-MM-DD"
+                />
+              </div>
+            </div>
+          </div>
+          <div
+            class="batch-sync-tip"
+            style="
+              margin-top: 16px;
+              padding: 16px;
+              background: #fff7e6;
+              border: 1px solid #ffd591;
+              border-radius: 6px;
+              font-size: 13px;
+              color: #d46b08;
+            "
+          >
+            <div style="display: flex; align-items: flex-start; margin-bottom: 12px;">
+              <InfoCircleOutlined style="margin-right: 8px; margin-top: 2px; color: #fa8c16;" />
+              <span style="font-weight: 500; color: #d46b08;">重要提示</span>
+            </div>
+            <div style="line-height: 1.6;">
+              <div style="margin-bottom: 8px;">
+                <strong>• 后台执行：</strong>范围同步将在后台自动执行，无需等待完成即可关闭此窗口
+              </div>
+              <div style="margin-bottom: 8px;">
+                <strong>• 分批存储：</strong>系统会边同步边存储数据，每200条自动保存一次，避免数据丢失
+              </div>
+              <div style="margin-bottom: 8px;">
+                <strong>• 实时查看：</strong>可以随时刷新页面或选择日期来查看已同步的数据
+              </div>
+              <div style="margin-bottom: 8px;">
+                <strong>• 时间预估：</strong>同步大量日期可能需要较长时间，请耐心等待
+              </div>
+              <div>
+                <strong>• 单日同步：</strong>如果不选择结束日期，将只同步开始日期的数据
+              </div>
+            </div>
+          </div>
+        </div>
+      </a-modal>
+
       <!-- 门店配置Modal -->
       <StoreConfigModal
         v-model:open="showStoreConfigModal"
@@ -134,6 +231,7 @@ const API_BASE_URL = "http://localhost:18888";
 // 响应式数据
 const loading = ref(false);
 const syncLoading = ref(false);
+const batchSyncLoading = ref(false);
 const syncProgress = ref(0);
 const syncStatus = ref("准备中...");
 const tableData = ref<DataItem[]>([]);
@@ -143,6 +241,11 @@ const syncResult = ref<any>(null);
 // 同步数据Modal相关
 const showSyncModal = ref(false);
 const syncDate = ref(dayjs().subtract(1, "day")); // 默认昨天
+
+// 批量同步数据Modal相关
+const showBatchSyncModal = ref(false);
+const batchStartDate = ref(dayjs().subtract(7, "day")); // 默认一周前
+const batchEndDate = ref(dayjs().subtract(1, "day")); // 默认昨天
 
 // 门店配置相关
 const showStoreConfigModal = ref(false);
@@ -326,6 +429,87 @@ const handleSyncConfirm = async () => {
       syncProgress.value = 0;
       syncStatus.value = "准备中...";
     }, 1500);
+  }
+};
+
+// 显示批量同步Modal
+const showBatchSyncModalHandler = () => {
+  showBatchSyncModal.value = true;
+};
+
+// 批量同步确认处理
+const handleBatchSyncConfirm = async () => {
+  if (!batchStartDate.value) {
+    message.error("请选择开始日期");
+    return;
+  }
+
+  const startDate = batchStartDate.value.format("YYYY-MM-DD");
+  const endDate = batchEndDate.value ? batchEndDate.value.format("YYYY-MM-DD") : null;
+
+  // 验证日期范围
+  if (endDate && batchStartDate.value.isAfter(batchEndDate.value)) {
+    message.error("开始日期不能大于结束日期");
+    return;
+  }
+
+  // 计算日期范围天数
+  const dayCount = endDate ? batchEndDate.value.diff(batchStartDate.value, 'day') + 1 : 1;
+  
+  // 二次确认
+  const confirmMessage = endDate 
+    ? `确认要同步 ${startDate} 到 ${endDate} 共 ${dayCount} 天的数据吗？\n\n同步将在后台执行，您可以随时查看进度。`
+    : `确认要同步 ${startDate} 这一天的数据吗？\n\n同步将在后台执行，您可以随时查看进度。`;
+
+  // 使用 Ant Design 的 Modal.confirm 进行二次确认
+  const { Modal } = await import('ant-design-vue');
+  Modal.confirm({
+    title: '确认开始范围同步',
+    content: confirmMessage,
+    okText: '确认开始',
+    cancelText: '取消',
+    onOk: async () => {
+      await executeBatchSync(startDate, endDate);
+    }
+  });
+};
+
+const executeBatchSync = async (startDate: string, endDate: string | null) => {
+  showBatchSyncModal.value = false;
+
+  try {
+    batchSyncLoading.value = true;
+
+    const response = await fetch(`${API_BASE_URL}/api/batch-sync-data`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        start_date: startDate,
+        end_date: endDate,
+      }),
+    });
+
+    const result = await response.json();
+    console.log("批量同步响应:", result);
+
+    if (result.success) {
+      const dayCount = endDate ? dayjs(endDate).diff(dayjs(startDate), 'day') + 1 : 1;
+      message.success({
+        content: `范围同步已开始执行！\n正在同步 ${startDate}${endDate ? ` 到 ${endDate}` : ''} 共 ${dayCount} 天的数据\n\n您可以随时刷新页面查看同步进度`,
+        duration: 6
+      });
+    } else {
+      message.error(result.message || "范围同步启动失败");
+    }
+  } catch (error) {
+    console.error("范围同步失败:", error);
+    message.error(
+      `范围同步失败: ${error instanceof Error ? error.message : "未知错误"}`
+    );
+  } finally {
+    batchSyncLoading.value = false;
   }
 };
 

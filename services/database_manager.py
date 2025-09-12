@@ -34,7 +34,7 @@ def get_database_dir():
     
     if getattr(sys, 'frozen', False):
         # PyInstaller打包后的情况
-        from pathlib import Path
+        # from pathlib import Path
         executable_path = Path(sys.executable)
         
         # 使用exe文件所在目录作为数据库目录

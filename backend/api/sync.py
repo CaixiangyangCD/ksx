@@ -4,10 +4,14 @@
 数据同步API路由
 """
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks
 import sys
 import os
 import asyncio
+import subprocess
+import shutil
+from backend.models.schemas import SyncRequest, SyncResponse, BatchSyncRequest
+
 # 尝试导入loguru，如果失败则使用标准logging
 try:
     from loguru import logger
@@ -23,8 +27,6 @@ except ImportError:
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(project_root)
 
-from backend.models.schemas import SyncRequest, SyncResponse
-
 router = APIRouter(prefix="/api", tags=["sync"])
 
 
@@ -38,7 +40,6 @@ async def run_crawler_internal(target_date: str = None):
         logger.info(f"设置爬虫数据库目录环境变量: {main_db_dir}")
         
         # 在打包环境中，使用子进程运行爬虫，避免与Qt主线程冲突
-        import subprocess
         
         # 构建爬虫命令 - 使用外部Python进程完全隔离
         if getattr(sys, 'frozen', False):
@@ -281,7 +282,12 @@ async def run_crawler_external(target_date: str = None, project_root: str = None
     try:
         # 构建爬虫命令
         crawler_script = os.path.join(project_root, "services", "crawler", "main.py")
-        cmd = ["uv", "run", "python", crawler_script]
+        
+        # 检查是否可以使用uv命令，如果不行则直接使用python
+        if shutil.which("uv"):
+            cmd = ["uv", "run", "python", crawler_script]
+        else:
+            cmd = ["python", crawler_script]
         
         # 如果指定了日期，添加日期参数
         if target_date:
@@ -297,14 +303,52 @@ async def run_crawler_external(target_date: str = None, project_root: str = None
         env['KSX_DATABASE_DIR'] = main_db_dir
         logger.info(f"设置爬虫数据库目录环境变量: {main_db_dir}")
         
-        # 运行爬虫程序
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=project_root,
-            env=env
-        )
+        # 运行爬虫程序 - 使用更兼容的方式
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=project_root,
+                env=env
+            )
+        except NotImplementedError:
+            # Windows兼容性处理：使用同步方式
+            logger.info("异步子进程创建失败，使用同步方式")
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=project_root,
+                env=env,
+                text=True
+            )
+            # 等待进程完成
+            stdout, stderr = process.communicate()
+            return_code = process.returncode
+            
+            if return_code == 0:
+                logger.info("爬虫执行成功")
+                # 尝试从输出中解析爬取的数据条数
+                total_count = 0
+                if stdout:
+                    # 查找 "Total Records: X" 的模式
+                    import re
+                    match = re.search(r'Total Records:\s*(\d+)', stdout)
+                    if match:
+                        total_count = int(match.group(1))
+                    else:
+                        # 如果没有找到，尝试查找其他模式
+                        match = re.search(r'(\d+).*?条.*?数据', stdout)
+                        if match:
+                            total_count = int(match.group(1))
+                
+                logger.info(f"爬虫输出: {stdout}")
+                return {"success": True, "message": "爬虫执行成功", "total": total_count}
+            else:
+                logger.error(f"爬虫执行失败，返回码: {return_code}")
+                logger.error(f"错误输出: {stderr}")
+                return {"success": False, "message": f"爬虫执行失败: {stderr}"}                                                                                                                                                                                                            
         
         # 实时读取输出
         stdout_lines = []
@@ -319,7 +363,7 @@ async def run_crawler_external(target_date: str = None, project_root: str = None
                 if line_text:
                     stdout_lines.append(line_text)
                     logger.info(f"爬虫输出: {line_text}")
-                    # print(f"爬虫输出: {line_text}")
+                    # print(f"爬虫输出: {line_text}")  
         
         async def read_stderr():
             while True:
@@ -395,16 +439,19 @@ async def run_crawler_external(target_date: str = None, project_root: str = None
                 if match:
                     new_count = int(match.group(1))
             
-            return True, message, new_count
+            return {"success": True, "message": message, "total": new_count}
         else:
             error_msg = stderr.decode('utf-8', errors='ignore')
             logger.error(f"爬虫程序执行失败: {error_msg}")
-            return False, f"爬虫执行失败: {error_msg}", 0
+            return {"success": False, "message": f"爬虫执行失败: {error_msg}", "total": 0}
             
     except Exception as e:
-        error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
+        error_msg = str(e)
         logger.error(f"Crawler execution exception: {error_msg}")
-        return False, f"Crawler execution exception: {error_msg}", 0
+        logger.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        return {"success": False, "message": f"Crawler execution exception: {error_msg}", "total": 0}
 
 
 async def run_crawler(target_date: str = None):
@@ -426,9 +473,86 @@ async def run_crawler(target_date: str = None):
             return await run_crawler_external(target_date, project_root)
             
     except Exception as e:
-        error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
+        error_msg = str(e)
         logger.error(f"Crawler execution failed: {error_msg}")
-        return False, f"Crawler execution failed: {error_msg}", 0
+        logger.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        return {"success": False, "message": f"Crawler execution failed: {error_msg}", "total": 0}
+
+
+async def run_crawler_batch_external(start_date: str, end_date: str = None, project_root: str = None):
+    """在开发环境中使用外部进程运行批量爬虫（后台执行，不等待结果）"""
+    try:
+        # 构建爬虫命令
+        crawler_script = os.path.join(project_root, "services", "crawler", "main.py")
+        
+        # 检查是否可以使用uv命令，如果不行则直接使用python
+        if shutil.which("uv"):
+            cmd = ["uv", "run", "python", crawler_script, "--start-date", start_date]
+        else:
+            cmd = ["python", crawler_script, "--start-date", start_date]
+        
+        # 如果指定了结束日期，添加结束日期参数
+        if end_date:
+            cmd.extend(["--end-date", end_date])
+        
+        logger.info(f"执行批量爬虫命令: {' '.join(cmd)}")
+        logger.info(f"命令详细参数 - start_date: {start_date}, end_date: {end_date}")
+        
+        # 设置环境变量
+        env = os.environ.copy()
+        
+        # 获取主应用的数据库目录
+        from services.database_manager import get_database_dir
+        main_db_dir = get_database_dir()
+        env['KSX_DATABASE_DIR'] = main_db_dir
+        logger.info(f"设置爬虫数据库目录环境变量: {main_db_dir}")
+        
+        # 使用Popen启动后台进程，不等待结果
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=project_root,
+            env=env,
+            text=True
+        )
+        
+        logger.info(f"批量爬虫已启动，进程ID: {process.pid}")
+        return {"success": True, "message": "批量爬虫已开始执行", "pid": process.pid}
+        
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Batch crawler execution exception: {error_msg}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        return {"success": False, "message": f"批量爬虫启动失败: {error_msg}"}
+
+
+async def run_crawler_batch(start_date: str, end_date: str = None):
+    """运行批量爬虫程序（后台执行）"""
+    try:
+        logger.info(f"开始运行批量爬虫程序，日期范围: {start_date} 到 {end_date or start_date}")
+        
+        # 根据环境选择不同的执行方式
+        if getattr(sys, 'frozen', False):
+            # 打包环境：使用内置模块（这里暂时返回不支持，因为批量处理在打包环境中可能有问题）
+            logger.warning("打包环境暂不支持批量爬取")
+            return {"success": False, "message": "打包环境暂不支持批量爬取"}
+        else:
+            # 开发环境：使用外部进程
+            logger.info("开发环境：使用外部进程执行批量爬虫")
+            return await run_crawler_batch_external(start_date, end_date, project_root)
+            
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Batch crawler execution failed: {error_msg}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        return {"success": False, "message": f"批量爬虫执行失败: {error_msg}"}
 
 
 @router.post("/sync-data", response_model=SyncResponse)
@@ -446,19 +570,22 @@ async def sync_data(request: SyncRequest, background_tasks: BackgroundTasks):
             logger.info("收到同步数据请求，使用默认日期")
         
         # 运行爬虫程序
-        success, message, new_count = await run_crawler(target_date)
+        result = await run_crawler(target_date)
         
-        if success:
+        if isinstance(result, dict):
+            # 新的字典格式
             return SyncResponse(
-                success=True,
-                message=message,
-                total=new_count  # 使用total字段而不是new_count
+                success=result["success"],
+                message=result["message"],
+                total=result["total"]
             )
         else:
+            # 兼容旧的元组格式
+            success, message, new_count = result
             return SyncResponse(
-                success=False,
+                success=success,
                 message=message,
-                total=0
+                total=new_count
             )
             
     except Exception as e:
@@ -467,5 +594,44 @@ async def sync_data(request: SyncRequest, background_tasks: BackgroundTasks):
         return SyncResponse(
             success=False,
             message=f"数据同步失败: {str(e)}",
+            total=0
+        )
+
+
+@router.post("/batch-sync-data", response_model=SyncResponse)
+async def batch_sync_data(request: BatchSyncRequest, background_tasks: BackgroundTasks):
+    """
+    批量同步数据接口
+    
+    启动批量爬虫程序获取指定日期范围的数据，后台执行不等待结果
+    """
+    try:
+        start_date = request.start_date
+        end_date = request.end_date or request.start_date  # 如果没有结束日期，使用开始日期
+        
+        logger.info(f"收到批量同步数据请求，日期范围: {start_date} 到 {end_date}")
+        
+        # 运行批量爬虫程序（后台执行）
+        result = await run_crawler_batch(start_date, end_date)
+        
+        if isinstance(result, dict):
+            return SyncResponse(
+                success=result["success"],
+                message=result["message"],
+                total=0  # 批量执行时无法立即返回总数
+            )
+        else:
+            return SyncResponse(
+                success=False,
+                message="批量爬虫启动失败",
+                total=0
+            )
+            
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Batch data sync failed: {error_msg}")
+        return SyncResponse(
+            success=False,
+            message=f"批量数据同步失败: {error_msg}",
             total=0
         )

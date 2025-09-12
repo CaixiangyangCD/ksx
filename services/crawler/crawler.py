@@ -182,10 +182,14 @@ class KSXCrawler:
         # 从配置文件读取用户名和密码
         try:
             # 尝试不同的导入方式
+            # 智能导入配置，支持开发环境和生产环境
             try:
-                from config import LOGIN_CONFIG
-            except ImportError:
                 from .config import LOGIN_CONFIG
+            except ImportError:
+                try:
+                    from services.crawler.config import LOGIN_CONFIG
+                except ImportError:
+                    from config import LOGIN_CONFIG
             
             self.username = LOGIN_CONFIG['username']
             self.password = LOGIN_CONFIG['password']
@@ -670,8 +674,18 @@ class KSXCrawler:
             self.logger.error(f"登录失败: {e}")
             return False
     
-    async def set_date_and_search(self, target_date: str = None) -> bool:
-        """设置日期并执行搜索"""
+    async def set_date_and_search(self, target_date: str = None, end_date: str = None, change_page_size: bool = True) -> bool:
+        """
+        设置日期并执行搜索
+        
+        Args:
+            target_date: 开始日期，格式为YYYY-MM-DD，如果为None则使用默认日期
+            end_date: 结束日期，格式为YYYY-MM-DD，如果为None则使用target_date
+            change_page_size: 是否修改每页显示数量为最大值，默认为True
+            
+        Returns:
+            bool: 搜索是否成功
+        """
         try:
             self.logger.info("正在设置日期并执行搜索...")
             
@@ -693,35 +707,45 @@ class KSXCrawler:
                 self.logger.error(f"未找到足够的日期输入框，找到 {len(date_inputs) if date_inputs else 0} 个")
                 return False
             
-            # 计算目标日期
+            # 计算开始日期
             if target_date:
-                # 使用传入的目标日期
-                date_str = target_date
-                self.logger.info(f"使用传入的目标日期: {date_str}")
+                # 使用传入的开始日期
+                start_date_str = target_date
+                self.logger.info(f"使用传入的开始日期: {start_date_str}")
             elif self.target_date:
-                # 使用指定的目标日期
-                date_str = self.target_date
-                self.logger.info(f"使用指定的目标日期: {date_str}")
+                # 使用指定的开始日期
+                start_date_str = self.target_date
+                self.logger.info(f"使用指定的开始日期: {start_date_str}")
             else:
                 # 使用已知有数据的日期（9月6日）
-                date_str = "2025-09-06"
-                self.logger.info(f"使用默认日期（已知有数据）: {date_str}")
+                start_date_str = "2025-09-06"
+                self.logger.info(f"使用默认开始日期（已知有数据）: {start_date_str}")
+            
+            # 计算结束日期
+            if end_date:
+                # 使用传入的结束日期
+                end_date_str = end_date
+                self.logger.info(f"使用传入的结束日期: {end_date_str}")
+            else:
+                # 如果没有指定结束日期，使用开始日期
+                end_date_str = start_date_str
+                self.logger.info(f"未指定结束日期，使用开始日期作为结束日期: {end_date_str}")
             
             # 设置开始日期（第一个输入框）
             start_date_input = date_inputs[0]
             await start_date_input.fill('')
-            await start_date_input.type(date_str, delay=100)
-            self.logger.info(f"设置开始日期为: {date_str}")
+            await start_date_input.type(start_date_str, delay=100)
+            self.logger.info(f"设置开始日期为: {start_date_str}")
             
-            # 验证日期输入
+            # 验证开始日期输入
             start_date_value = await start_date_input.input_value()
             self.logger.info(f"验证开始日期输入值: {start_date_value}")
             
             # 设置结束日期（第二个输入框）
             end_date_input = date_inputs[1]
             await end_date_input.fill('')
-            await end_date_input.type(date_str, delay=100)
-            self.logger.info(f"设置结束日期为: {date_str}")
+            await end_date_input.type(end_date_str, delay=100)
+            self.logger.info(f"设置结束日期为: {end_date_str}")
             
             # 验证结束日期输入
             end_date_value = await end_date_input.input_value()
@@ -744,6 +768,10 @@ class KSXCrawler:
                 self.logger.warning(f"等待网络空闲超时: {e}")
             
             await asyncio.sleep(3)  # 增加等待时间
+            
+            # 修改每页显示数量为最大值（可选）
+            if change_page_size:
+                await self.change_page_size_to_max()
             
             # 检查页面是否还在加载
             try:
@@ -843,13 +871,20 @@ class KSXCrawler:
                 'error': str(e)
             }
     
-    async def extract_all_pages_data_from_api(self) -> list:
-        """使用API数据提取所有页面数据"""
+    async def extract_all_pages_data_from_api(self, max_pages: int = 20, batch_save: bool = False, batch_size: int = 200) -> list:
+        """使用API数据提取所有页面数据
+        
+        Args:
+            max_pages: 最大页数限制，默认20页，日期范围爬取时可以设置更大的值
+            batch_save: 是否启用分批保存，默认False
+            batch_size: 分批保存的大小，默认200条
+        """
         try:
             self.logger.info(" 开始基于API的数据提取...")
             # print(" 开始基于API的数据提取...")
             all_data = []
             current_page = 1
+            total_saved = 0  # 记录已保存的总数
             total_pages = 0
             total_records = 0
             seen_ids = set()  # 用于检查重复数据
@@ -895,7 +930,7 @@ class KSXCrawler:
                     total_records = page_info.get('total', 0)
                     page_size = page_info.get('pageSize', 50)
                     total_pages = (total_records + page_size - 1) // page_size
-                    self.logger.info(f" 数据统计: 总计 {total_records} 条记录，共 {total_pages} 页")
+                    self.logger.info(f" 数据统计: 总计 {total_records} 条记录，每页 {page_size} 条，共 {total_pages} 页")
                 
                 # 检查数据是否重复
                 if page_data:
@@ -912,6 +947,22 @@ class KSXCrawler:
                     
                     all_data.extend(page_data)
                     self.logger.info(f" 第 {current_page} 页: 新增 {len(page_data)} 条记录（其中 {new_count} 条新数据），累计 {len(all_data)} 条")
+                    
+                    # 分批保存逻辑
+                    if batch_save and len(all_data) >= batch_size:
+                        self.logger.info(f" 达到分批保存阈值 ({batch_size} 条)，开始保存数据...")
+                        try:
+                            # 保存当前批次的数据
+                            batch_result = await self.save_to_database_by_date(all_data)
+                            saved_count = batch_result.get("total_records", 0)
+                            total_saved += saved_count
+                            self.logger.info(f" 分批保存完成: 保存了 {saved_count} 条记录，累计保存 {total_saved} 条")
+                            
+                            # 清空已保存的数据，继续下一批
+                            all_data = []
+                        except Exception as e:
+                            self.logger.error(f" 分批保存失败: {e}")
+                            # 保存失败时不中断，继续爬取
                 else:
                     self.logger.warning(f"⚠️ 第 {current_page} 页: 没有数据")
                     break
@@ -929,7 +980,7 @@ class KSXCrawler:
                     break
                 
                 # 安全检查：避免无限循环
-                if current_page >= 20:  # 最多20页
+                if current_page >= max_pages:
                     self.logger.info(f" 达到最大页数限制 ({current_page})，停止提取")
                     break
                 
@@ -938,13 +989,83 @@ class KSXCrawler:
                 # 页面间等待，增加等待时间
                 await asyncio.sleep(3)
             
-            self.logger.info(f" 数据提取完成！总计获取 {len(all_data)} 条记录，唯一记录 {len(seen_ids)} 条")
+            # 保存剩余的数据（如果有的话）
+            if batch_save and all_data:
+                self.logger.info(f" 保存剩余数据 ({len(all_data)} 条)...")
+                try:
+                    batch_result = await self.save_to_database_by_date(all_data)
+                    saved_count = batch_result.get("total_records", 0)
+                    total_saved += saved_count
+                    self.logger.info(f" 剩余数据保存完成: 保存了 {saved_count} 条记录")
+                except Exception as e:
+                    self.logger.error(f" 剩余数据保存失败: {e}")
+            
+            if batch_save:
+                self.logger.info(f" 数据提取完成！总计获取 {len(seen_ids)} 条唯一记录，累计保存 {total_saved} 条记录")
+            else:
+                self.logger.info(f" 数据提取完成！总计获取 {len(all_data)} 条记录，唯一记录 {len(seen_ids)} 条")
+            
             return all_data
             
         except Exception as e:
             self.logger.error(f"❌ API数据提取过程出错: {e}")
             return []
     
+    async def change_page_size_to_max(self) -> bool:
+        """修改每页显示数量为最大值"""
+        try:
+            self.logger.info("正在修改每页显示数量...")
+            
+            # 查找页码选择器
+            page_size_changer = await self.page.wait_for_selector('.lb-LBPagination-pageSizeChanger', timeout=5000)
+            if not page_size_changer:
+                self.logger.warning("未找到页码选择器，跳过修改每页显示数量")
+                return False
+            
+            # 点击页码选择器
+            await page_size_changer.click()
+            self.logger.info("点击页码选择器")
+            await asyncio.sleep(1.5)  # 等待下拉菜单显示（增加等待时间）
+            
+            # 查找下拉菜单容器
+            popper_sizer = await self.page.wait_for_selector('.lb-LBPopper-sizer', timeout=5000)
+            if not popper_sizer:
+                self.logger.warning("未找到下拉菜单容器")
+                return False
+            
+            # 查找下拉菜单中的ul元素
+            ul_element = await popper_sizer.query_selector('ul')
+            if not ul_element:
+                self.logger.warning("未找到下拉菜单中的ul元素")
+                return False
+            
+            # 获取所有li元素
+            li_elements = await ul_element.query_selector_all('li')
+            if not li_elements:
+                self.logger.warning("未找到下拉菜单中的li元素")
+                return False
+            
+            # 点击最后一个li元素（通常是最大值）
+            last_li = li_elements[-1]
+            await last_li.click()
+            self.logger.info("点击最后一个选项，修改每页显示数量")
+            
+            # 等待页面更新（增加等待时间）
+            await asyncio.sleep(3)
+            
+            # 等待网络请求完成
+            try:
+                await self.page.wait_for_load_state('networkidle', timeout=15000)
+            except Exception as e:
+                self.logger.warning(f"等待网络空闲超时: {e}")
+            
+            self.logger.info("✅ 每页显示数量修改成功")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ 修改每页显示数量失败: {e}")
+            return False
+
     async def click_next_page_api(self) -> bool:
         """点击下一页（用于API数据提取）"""
         try:
@@ -1221,6 +1342,155 @@ class KSXCrawler:
         except Exception as e:
             self.logger.error(f"❌ 智能数据提取异常: {e}")
             return {"success": False, "action": "error", "message": f"智能数据提取异常: {str(e)}"}
+
+    async def full_api_data_extraction_range(self, start_date: str, end_date: str = None) -> dict:
+        """完整的API数据提取流程（支持日期范围）"""
+        try:
+            self.logger.info(f" 开始日期范围API数据提取流程，从 {start_date} 到 {end_date or start_date}...")
+            
+            # 执行搜索（传入日期范围）
+            search_result = await self.set_date_and_search(start_date, end_date)
+            if not search_result:
+                self.logger.error("❌ 搜索失败")
+                return {"success": False, "message": "搜索失败"}
+            
+            # 重试页面大小设置，确保获取最大数据量
+            page_size_success = False
+            for attempt in range(3):  # 最多重试3次
+                self.logger.info(f" 尝试第{attempt + 1}次设置页面大小...")
+                if await self.change_page_size_to_max():
+                    page_size_success = True
+                    break
+                else:
+                    self.logger.warning(f" 第{attempt + 1}次页面大小设置失败，等待后重试...")
+                    await asyncio.sleep(2)
+            
+            if not page_size_success:
+                self.logger.warning("⚠️ 页面大小设置失败，将使用默认页面大小继续")
+            else:
+                self.logger.info("✅ 页面大小设置成功")
+            
+            # 立即尝试获取第一页数据
+            self.logger.info(" 尝试获取第一页数据...")
+            
+            # 等待数据加载
+            await asyncio.sleep(3)
+            
+            # 获取所有页面数据（日期范围爬取时使用更大的页数限制和分批保存）
+            initial_data = await self.extract_all_pages_data_from_api(max_pages=1000, batch_save=True, batch_size=200)
+            
+            if not initial_data or len(initial_data) == 0:
+                self.logger.warning("⚠️ 未获取到任何数据")
+                return {"success": True, "message": "当前日期范围没有业务数据，请核查日期", "total": 0}
+            
+            # 数据已经在分批保存过程中保存了，initial_data 只包含最后一批未保存的数据
+            if initial_data:
+                self.logger.info(f" 处理最后一批数据 ({len(initial_data)} 条)...")
+                # 保存最后一批数据
+                final_batch_result = await self.save_to_database_by_date(initial_data)
+                self.logger.info(f" 最后一批数据保存结果: {final_batch_result}")
+            else:
+                self.logger.info(" 所有数据已在分批保存过程中完成")
+            
+            # 批量查询时，跳过门店同步以提高效率
+            self.logger.info(" 批量查询模式：跳过门店同步步骤")
+            
+            # 清理旧数据库
+            from services.database_manager import DatabaseManager
+            db_manager = DatabaseManager()
+            db_manager.cleanup_old_databases()
+            
+            return {
+                "success": True,
+                "message": f"API数据提取完成！数据已通过分批保存方式存储到数据库，避免了中途退出的数据丢失风险",
+                "total": 0,  # 分批保存时无法准确统计总数，但数据已保存
+                "files_created": 0,  # 分批保存时无法准确统计文件数
+                "details": {"batch_save": True, "batch_size": 200}
+            }
+            
+        except Exception as e:
+            self.logger.error(f"❌ 日期范围API数据提取异常: {e}")
+            return {"success": False, "message": f"日期范围API数据提取异常: {str(e)}"}
+
+    async def save_to_database_by_date(self, data: list) -> dict:
+        """按日期分组保存数据到不同的数据库文件"""
+        try:
+            if not data:
+                self.logger.warning("没有数据需要保存到数据库")
+                return {"total_records": 0, "files_created": 0, "details": {}}
+            
+            # 按 createDateShow 字段分组数据
+            date_groups = {}
+            for item in data:
+                if isinstance(item, dict):
+                    date_str = item.get('createDateShow', '')
+                    if date_str:
+                        # 确保日期格式为 YYYY-MM-DD
+                        try:
+                            # 解析并重新格式化日期以确保一致性
+                            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                            formatted_date = date_obj.strftime('%Y-%m-%d')
+                            
+                            if formatted_date not in date_groups:
+                                date_groups[formatted_date] = []
+                            date_groups[formatted_date].append(item)
+                        except ValueError:
+                            self.logger.warning(f"无效的日期格式: {date_str}，跳过该记录")
+                            continue
+                    else:
+                        self.logger.warning("记录缺少 createDateShow 字段，跳过该记录")
+                        continue
+            
+            if not date_groups:
+                self.logger.warning("没有找到有效的日期数据")
+                return {"total_records": 0, "files_created": 0, "details": {}}
+            
+            # 获取数据库管理器
+            db_manager = get_db_manager()
+            
+            total_saved = 0
+            save_details = {}
+            
+            # 为每个日期保存数据
+            for date_str, date_data in date_groups.items():
+                try:
+                    date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                    self.logger.info(f" 正在保存 {len(date_data)} 条记录到日期 {date_str} 的数据库...")
+                    
+                    # 插入数据到对应日期的数据库
+                    inserted_count = db_manager.insert_data(date_data, date=date_obj)
+                    total_saved += inserted_count
+                    save_details[date_str] = {
+                        "total_records": len(date_data),
+                        "saved_records": inserted_count
+                    }
+                    
+                    self.logger.info(f" 成功保存 {inserted_count} 条记录到日期 {date_str} 的数据库")
+                    
+                except Exception as e:
+                    self.logger.error(f"保存日期 {date_str} 的数据时出错: {e}")
+                    save_details[date_str] = {
+                        "total_records": len(date_data),
+                        "saved_records": 0,
+                        "error": str(e)
+                    }
+            
+            # 清理旧数据库（保留近1个月）
+            db_manager.cleanup_old_databases(keep_months=1)
+            
+            result = {
+                "total_records": total_saved,
+                "files_created": len([d for d in save_details.values() if d.get("saved_records", 0) > 0]),
+                "details": save_details
+            }
+            
+            self.logger.info(f" 按日期分组保存完成：总计保存 {total_saved} 条记录到 {result['files_created']} 个数据库文件")
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"❌ 按日期分组保存数据失败: {e}")
+            return {"total_records": 0, "files_created": 0, "details": {}, "error": str(e)}
 
     async def full_api_data_extraction(self) -> dict:
         """完整的API数据提取流程"""

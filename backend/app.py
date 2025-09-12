@@ -18,6 +18,9 @@ sys.path.append(project_root)
 # 导入API路由
 from backend.api import data, sync, export
 
+# 全局变量存储当前端口
+CURRENT_PORT = None
+
 # 创建FastAPI应用
 app = FastAPI(
     title="KSX数据查询API",
@@ -86,6 +89,22 @@ app.include_router(data.router)
 app.include_router(sync.router)
 app.include_router(export.router)
 
+# 添加端口信息接口
+@app.get("/port-info")
+async def get_port_info():
+    """获取当前后端端口信息"""
+    global CURRENT_PORT
+    if CURRENT_PORT:
+        return {
+            "success": True, 
+            "data": {
+                "port": CURRENT_PORT,
+                "url": f"http://localhost:{CURRENT_PORT}",
+                "message": "KSX数据查询API服务"
+            }
+        }
+    else:
+        return {"success": False, "message": "端口信息未初始化"}
 
 @app.get("/", response_model=dict)
 async def root():
@@ -112,14 +131,33 @@ if __name__ == "__main__":
     # 创建logs目录
     os.makedirs("logs", exist_ok=True)
     
-    logger.info("启动KSX数据查询API服务...")
+    # 固定端口
+    PORT = 18888
     
-    uvicorn.run(
-        "app:app",
-        host="127.0.0.1",
-        port=18888,
-        reload=True,
-        log_level="info"
-    )
+    logger.info("启动KSX数据查询API服务...")
+    logger.info(f"✅ 服务将在端口 {PORT} 启动")
+    
+    # 设置全局端口变量
+    CURRENT_PORT = PORT
+    
+    try:
+        uvicorn.run(
+            "app:app",
+            host="127.0.0.1",
+            port=PORT,
+            reload=True,
+            log_level="info",
+            access_log=True
+        )
+    except OSError as e:
+        if "Address already in use" in str(e) or "端口已被占用" in str(e):
+            logger.error(f"❌ 端口{PORT}启动失败：端口已被占用")
+            logger.error("请关闭其他使用该端口的程序")
+        else:
+            logger.error(f"❌ 服务器启动失败: {e}")
+        exit(1)
+    except Exception as e:
+        logger.error(f"❌ 服务器启动失败: {e}")
+        exit(1)
 
 

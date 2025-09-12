@@ -12,7 +12,18 @@
         <template #icon>
           <SyncOutlined />
         </template>
-        同步数据
+        单日同步
+      </a-button>
+      <a-button 
+        type="primary" 
+        ghost
+        :loading="batchSyncLoading"
+        @click="$emit('batchSync')"
+      >
+        <template #icon>
+          <CalendarOutlined />
+        </template>
+        范围同步
       </a-button>
       <a-button 
         type="default"
@@ -48,16 +59,18 @@
 </template>
 
 <script setup lang="ts">
-import { SyncOutlined, SettingOutlined, DownloadOutlined, FileExcelOutlined, FieldTimeOutlined } from '@ant-design/icons-vue'
+import { SyncOutlined, SettingOutlined, DownloadOutlined, FileExcelOutlined, FieldTimeOutlined, CalendarOutlined } from '@ant-design/icons-vue'
 
 interface Props {
   total: number
   syncLoading: boolean
+  batchSyncLoading: boolean
   hasData: boolean
 }
 
 interface Emits {
   (e: 'sync'): void
+  (e: 'batchSync'): void
   (e: 'config'): void
   (e: 'fieldConfig'): void
   (e: 'export'): void

@@ -20,6 +20,12 @@ class SyncDataRequest(BaseModel):
     date: str
 
 
+class BatchSyncRequest(BaseModel):
+    """批量同步请求模型"""
+    start_date: str
+    end_date: Optional[str] = None  # 如果不提供，默认等于start_date
+
+
 class ExportDataRequest(BaseModel):
     """导出数据请求模型"""
     selected_stores: List[int]
