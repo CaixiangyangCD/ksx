@@ -2,100 +2,112 @@
   <a-config-provider :locale="zhCN">
     <div id="app">
       <div class="app-container">
-      <div class="container">
-        <!-- 搜索栏 -->
-        <SearchBar
-          :loading="loading"
-          @search="handleSearch"
-          @clear="handleClear"
-        />
+        <div class="container">
+          <!-- 搜索栏 -->
+          <SearchBar
+            :loading="loading"
+            @search="handleSearch"
+            @clear="handleClear"
+          />
 
-        <!-- 操作栏 -->
-        <ActionBar
-          :total="pagination.total"
-          :sync-loading="syncLoading"
-          :has-data="tableData.length > 0"
-          @sync="handleSyncData"
-          @config="showStoreConfig"
-          @fieldConfig="showFieldConfig"
-          @export="exportData"
-          @exportExcel="showExcelExport"
-        />
+          <!-- 操作栏 -->
+          <ActionBar
+            :total="pagination.total"
+            :sync-loading="syncLoading"
+            :has-data="tableData.length > 0"
+            @sync="handleSyncData"
+            @config="showStoreConfig"
+            @fieldConfig="showFieldConfig"
+            @export="exportData"
+            @exportExcel="showExcelExport"
+          />
 
-        <!-- 数据表格 -->
-        <DataTable
-          :data-source="tableData"
-          :loading="loading"
-          :pagination="pagination"
-          @change="handleTableChange"
-        />
-      </div>
-    </div>
-
-    <!-- 同步数据遮罩层 -->
-    <SyncOverlay
-      :loading="syncLoading"
-      :progress="syncProgress"
-      :status="syncStatus"
-    />
-
-    <!-- 错误Modal -->
-    <ErrorModal v-model:open="showNoDataModal" :sync-result="syncResult" />
-
-    <!-- 同步数据Modal -->
-    <a-modal
-      v-model:open="showSyncModal"
-      title="同步数据"
-      :width="500"
-      @ok="handleSyncConfirm"
-      @cancel="showSyncModal = false"
-      :confirm-loading="syncLoading"
-      ok-text="确认同步"
-      cancel-text="取消"
-    >
-      <div class="sync-modal-content">
-        <p style="margin-bottom: 16px; color: #666;">
-          选择要同步数据的日期，系统将启动爬虫程序获取该日期的业务数据。
-        </p>
-        <div class="date-picker-container">
-          <label style="display: block; margin-bottom: 8px; font-weight: 500;">选择日期：</label>
-          <a-date-picker
-            v-model:value="syncDate"
-            :disabled-date="disabledDate"
-            placeholder="请选择日期"
-            style="width: 100%"
-            format="YYYY-MM-DD"
+          <!-- 数据表格 -->
+          <DataTable
+            :data-source="tableData"
+            :loading="loading"
+            :pagination="pagination"
+            @change="handleTableChange"
           />
         </div>
-        <div class="sync-tip" style="margin-top: 12px; padding: 8px; background: #f6f8fa; border-radius: 4px; font-size: 12px; color: #666;">
-          <InfoCircleOutlined style="margin-right: 4px;" />
-          只能选择昨天和昨天以前的日期
-        </div>
       </div>
-    </a-modal>
 
-    <!-- 门店配置Modal -->
-    <StoreConfigModal
-      v-model:open="showStoreConfigModal"
-      :stores="stores"
-      :current-rule="currentRule"
-      @save="handleSaveExportRule"
-    />
+      <!-- 同步数据遮罩层 -->
+      <SyncOverlay
+        :loading="syncLoading"
+        :progress="syncProgress"
+        :status="syncStatus"
+      />
 
-    <FieldConfigModal
-      v-model:open="showFieldConfigModal"
-      :field-config="fieldConfig"
-      :current-rule="currentFieldRule"
-      @save="handleSaveFieldRule"
-    />
+      <!-- 错误Modal -->
+      <ErrorModal v-model:open="showNoDataModal" :sync-result="syncResult" />
 
-    <ExcelExportModal
-      v-model:open="showExcelExportModal"
-      :current-store-rule="currentRule"
-      :current-field-rule="currentFieldRule"
-      :current-query-date="currentQueryDate"
-      @export="handleExcelExport"
-    />
+      <!-- 同步数据Modal -->
+      <a-modal
+        v-model:open="showSyncModal"
+        title="同步数据"
+        :width="500"
+        @ok="handleSyncConfirm"
+        @cancel="showSyncModal = false"
+        :confirm-loading="syncLoading"
+        ok-text="确认同步"
+        cancel-text="取消"
+      >
+        <div class="sync-modal-content">
+          <p style="margin-bottom: 16px; color: #666">
+            选择要同步数据的日期，系统将启动爬虫程序获取该日期的业务数据。
+          </p>
+          <div class="date-picker-container">
+            <label style="display: block; margin-bottom: 8px; font-weight: 500"
+              >选择日期：</label
+            >
+            <a-date-picker
+              v-model:value="syncDate"
+              :disabled-date="disabledDate"
+              placeholder="请选择日期"
+              style="width: 100%"
+              format="YYYY-MM-DD"
+            />
+          </div>
+          <div
+            class="sync-tip"
+            style="
+              margin-top: 12px;
+              padding: 8px;
+              background: #f6f8fa;
+              border-radius: 4px;
+              font-size: 12px;
+              color: #666;
+            "
+          >
+            <InfoCircleOutlined style="margin-right: 4px" />
+            只能选择昨天和昨天以前的日期
+          </div>
+        </div>
+      </a-modal>
+
+      <!-- 门店配置Modal -->
+      <StoreConfigModal
+        v-model:open="showStoreConfigModal"
+        :stores="stores"
+        :current-rule="currentRule"
+        @save="handleSaveExportRule"
+      />
+
+      <FieldConfigModal
+        v-model:open="showFieldConfigModal"
+        :field-config="fieldConfig"
+        :current-rule="currentFieldRule"
+        @save="handleSaveFieldRule"
+      />
+
+      <ExcelExportModal
+        v-model:open="showExcelExportModal"
+        :current-store-rule="currentRule"
+        :current-field-rule="currentFieldRule"
+        :current-query-date="currentQueryDate"
+        @export="handleExcelExport"
+      />
     </div>
   </a-config-provider>
 </template>
@@ -130,7 +142,7 @@ const syncResult = ref<any>(null);
 
 // 同步数据Modal相关
 const showSyncModal = ref(false);
-const syncDate = ref(dayjs().subtract(1, 'day')); // 默认昨天
+const syncDate = ref(dayjs().subtract(1, "day")); // 默认昨天
 
 // 门店配置相关
 const showStoreConfigModal = ref(false);
@@ -162,10 +174,10 @@ const pagination = reactive({
   showSizeChanger: true,
   showQuickJumper: true,
   showTotal: (total: number) => `共 ${total} 条数据`,
-  pageSizeOptions: ['10', '20', '50', '100'],
-  showSizeChangerText: '每页显示',
-  showQuickJumperText: '跳至',
-  showTotalText: '共',
+  pageSizeOptions: ["10", "20", "50", "100"],
+  showSizeChangerText: "每页显示",
+  showQuickJumperText: "跳至",
+  showTotalText: "共",
   itemRender: undefined,
   simple: false,
 });
@@ -216,7 +228,7 @@ const handleSearch = (params: { date: string; mdshow: string }) => {
 const handleClear = () => {
   searchForm.mdshow = "";
   // 清空时重置为昨天的日期
-  const yesterday = dayjs().subtract(1, 'day').format('YYYY-MM-DD');
+  const yesterday = dayjs().subtract(1, "day").format("YYYY-MM-DD");
   currentQueryDate.value = yesterday;
   pagination.current = 1;
   loadData(1, pagination.pageSize, yesterday);
@@ -261,7 +273,7 @@ const handleSyncConfirm = async () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        date: syncDate.value.format('YYYY-MM-DD')
+        date: syncDate.value.format("YYYY-MM-DD"),
       }),
     });
 
@@ -271,28 +283,36 @@ const handleSyncConfirm = async () => {
 
     const result = await response.json();
 
-    // 检查是否真的成功（success为true且total大于0，或者消息不包含失败关键词和没有业务数据）
-    const isReallySuccess =
-      result.success &&
-      (result.total > 0 ||
-        (!result.message?.includes("失败") &&
-          !result.message?.includes("错误") &&
-          !result.message?.includes("没有业务数据")));
+    // 添加调试信息
+    console.log("🔍 同步API返回结果:", result);
+    console.log("🔍 result.success:", result.success);
+    console.log("🔍 result.message:", result.message);
 
-    if (isReallySuccess) {
-      // 同步完成后刷新数据，使用当前查询日期
+    if (result.success) {
+      // 同步成功的情况
       await loadData(1, pagination.pageSize, currentQueryDate.value);
 
       // 根据实际结果显示不同的提示信息
       if (result.total > 0) {
         message.success(`同步完成！新增 ${result.total} 条数据`);
+      } else if (result.message === "数据已是最新") {
+        message.success("同步完成！数据已是最新");
       } else {
-        message.success("同步完成！数据已是最新状态");
+        message.success("同步完成！");
       }
     } else {
-      // 显示错误Modal
+      // 同步失败的情况
+      // 强制显示调试信息
+      // alert(`调试信息:\nsuccess: ${result.success}\nmessage: "${result.message}"\ntotal: ${result.total}`);
+
+      // if (result.message && result.message.includes("没有业务数据")) {
+      //   // 特殊处理没有数据的情况
+      //   message.warning("当前同步日期没有数据，请选择其他日期");
+      // } else {
+      // 其他错误情况显示错误Modal
       syncResult.value = result;
       showNoDataModal.value = true;
+      // }
     }
   } catch (error) {
     console.error("同步数据失败:", error);
@@ -578,14 +598,14 @@ const handleExcelExport = async (selectedDate: any = null) => {
 
 // 禁用日期选择（只能选择昨天和昨天以前）
 const disabledDate = (current: any) => {
-  const yesterday = dayjs().subtract(1, 'day');
+  const yesterday = dayjs().subtract(1, "day");
   return current && current > yesterday;
 };
 
 // 页面加载时初始化数据
 onMounted(() => {
   // 使用昨天的日期作为默认查询日期
-  const yesterday = dayjs().subtract(1, 'day').format('YYYY-MM-DD');
+  const yesterday = dayjs().subtract(1, "day").format("YYYY-MM-DD");
   currentQueryDate.value = yesterday;
   loadData(1, 10, yesterday);
   loadExportRule(); // 加载导出规则

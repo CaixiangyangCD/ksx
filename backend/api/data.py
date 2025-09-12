@@ -17,7 +17,7 @@ except ImportError:
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
     LOGGER_AVAILABLE = False
-    print("警告: loguru不可用，使用标准logging模块")
+    # print("警告: loguru不可用，使用标准logging模块")
 from datetime import datetime, timedelta
 import re
 

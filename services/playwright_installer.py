@@ -24,37 +24,37 @@ def check_playwright_installation():
         import importlib.util
         spec = importlib.util.find_spec("playwright")
         if spec is not None:
-            print("✓ Playwright模块已安装")
+            # print("✓ Playwright模块已安装")
             return True
         else:
-            print("✗ Playwright模块未安装")
+            # print("✗ Playwright模块未安装")
             return False
     except Exception:
-        print("✗ Playwright模块未安装")
+        # print("✗ Playwright模块未安装")
         return False
 
 def install_playwright():
     """安装Playwright"""
     try:
-        print("正在安装Playwright...")
+        # print("正在安装Playwright...")
         result = subprocess.run([
             sys.executable, "-m", "pip", "install", "playwright"
         ], capture_output=True, text=True, timeout=300)
         
         if result.returncode == 0:
-            print("✓ Playwright安装成功")
+            # print("✓ Playwright安装成功")
             return True
         else:
-            print(f"✗ Playwright安装失败: {result.stderr}")
+            # print(f"✗ Playwright安装失败: {result.stderr}")
             return False
     except Exception as e:
-        print(f"✗ Playwright安装异常: {e}")
+        # print(f"✗ Playwright安装异常: {e}")
         return False
 
 def install_playwright_browsers():
     """安装Playwright浏览器"""
     try:
-        print("正在安装Playwright浏览器...")
+        # print("正在安装Playwright浏览器...")
         
         # 设置浏览器安装路径
         project_root = get_project_root()
@@ -68,13 +68,13 @@ def install_playwright_browsers():
         ], capture_output=True, text=True, timeout=600, env=os.environ.copy())
         
         if result.returncode == 0:
-            print("✓ Playwright浏览器安装成功")
+            # print("✓ Playwright浏览器安装成功")
             return True
         else:
-            print(f"✗ Playwright浏览器安装失败: {result.stderr}")
+            # print(f"✗ Playwright浏览器安装失败: {result.stderr}")
             return False
     except Exception as e:
-        print(f"✗ Playwright浏览器安装异常: {e}")
+        # print(f"✗ Playwright浏览器安装异常: {e}")
         return False
 
 def setup_playwright_environment():
@@ -89,19 +89,19 @@ def setup_playwright_environment():
         # 设置环境变量
         os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browser_path
         
-        print(f"✓ Playwright环境已设置，浏览器路径: {browser_path}")
+        # print(f"✓ Playwright环境已设置，浏览器路径: {browser_path}")
         return True
     except Exception as e:
-        print(f"✗ Playwright环境设置失败: {e}")
+        # print(f"✗ Playwright环境设置失败: {e}")
         return False
 
 def ensure_playwright_ready():
     """确保Playwright已准备就绪"""
-    print("🔍 检查Playwright环境...")
+    # print(" 检查Playwright环境...")
     
     # 1. 检查Playwright模块
     if not check_playwright_installation():
-        print("📦 正在安装Playwright模块...")
+        # print(" 正在安装Playwright模块...")
         if not install_playwright():
             return False
     
@@ -115,7 +115,7 @@ def ensure_playwright_ready():
     chromium_path = os.path.join(browser_path, "chromium-1091", "chrome-mac", "Chromium.app")
     
     if not os.path.exists(chromium_path):
-        print("🌐 正在安装Playwright浏览器...")
+        # print(" 正在安装Playwright浏览器...")
         if not install_playwright_browsers():
             return False
     
@@ -124,25 +124,25 @@ def ensure_playwright_ready():
         import importlib.util
         spec = importlib.util.find_spec("playwright.async_api")
         if spec is not None:
-            print("✓ Playwright测试成功")
+            # print("✓ Playwright测试成功")
             return True
         else:
-            print("✗ Playwright测试失败")
+            # print("✗ Playwright测试失败")
             return False
     except Exception as e:
-        print(f"✗ Playwright测试失败: {e}")
+        # print(f"✗ Playwright测试失败: {e}")
         return False
 
 def main():
     """主函数"""
-    print("🚀 Playwright环境检查和安装工具")
-    print("=" * 50)
+    # print(" Playwright环境检查和安装工具")
+    # print("=" * 50)
     
     if ensure_playwright_ready():
-        print("\n🎉 Playwright环境准备完成！")
+        # print("\n Playwright环境准备完成！")
         return True
     else:
-        print("\n❌ Playwright环境准备失败！")
+        # print("\n❌ Playwright环境准备失败！")
         return False
 
 if __name__ == "__main__":

@@ -26,8 +26,26 @@ class BrowserManager:
         """
         if project_root is None:
             # 自动检测项目根目录
-            current_file = Path(__file__).resolve()
-            self.project_root = current_file.parent.parent
+            if getattr(sys, 'frozen', False):
+                # 打包环境：直接使用用户目录
+                user_home = Path.home()
+                self.project_root = user_home / "KSX_App"
+                self.project_root.mkdir(exist_ok=True)
+                logger.info(f" 浏览器管理器：打包环境，使用用户目录: {self.project_root}")
+            else:
+                # 检查是否在临时目录中运行（爬虫子进程）
+                current_path = str(Path(__file__).resolve())
+                if 'Temp' in current_path and '_MEI' in current_path:
+                    # 在临时目录中运行，使用用户目录
+                    user_home = Path.home()
+                    self.project_root = user_home / "KSX_App"
+                    self.project_root.mkdir(exist_ok=True)
+                    logger.info(f" 浏览器管理器：临时目录环境，强制使用用户目录: {self.project_root}")
+                else:
+                    # 开发环境：使用项目根目录
+                    current_file = Path(__file__).resolve()
+                    self.project_root = current_file.parent.parent
+                    logger.info(f" 浏览器管理器：开发环境，使用项目根目录: {self.project_root}")
         else:
             self.project_root = Path(project_root)
         
@@ -39,6 +57,8 @@ class BrowserManager:
         os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(self.browser_path)
         
         logger.info(f"浏览器管理器初始化完成，浏览器路径: {self.browser_path}")
+        logger.info(f" 浏览器管理器：设置PLAYWRIGHT_BROWSERS_PATH环境变量: {self.browser_path}")
+        logger.info(f" 浏览器管理器：当前环境变量值: {os.environ.get('PLAYWRIGHT_BROWSERS_PATH', '未设置')}")
     
     def get_system_info(self) -> Dict[str, str]:
         """获取系统信息"""
@@ -68,6 +88,20 @@ class BrowserManager:
     def check_browser_installation(self, browser_name: str = "chromium") -> bool:
         """检查指定浏览器是否已安装"""
         try:
+            # 检查浏览器文件是否存在，而不是启动浏览器
+            # 这样可以避免在异步环境中的同步API冲突
+            import asyncio
+            
+            # 检查是否在异步环境中
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    logger.warning("在异步环境中跳过浏览器启动检查，仅检查文件存在性")
+                    return self._check_browser_files(browser_name)
+            except RuntimeError:
+                # 没有运行中的事件循环，可以使用同步API
+                pass
+            
             from playwright.sync_api import sync_playwright
             
             with sync_playwright() as p:
@@ -90,6 +124,94 @@ class BrowserManager:
                     return False
         except ImportError:
             logger.error("Playwright未安装，无法检查浏览器")
+            return False
+    
+    def _check_browser_files(self, browser_name: str) -> bool:
+        """检查浏览器文件是否存在（不启动浏览器）"""
+        try:
+            # 使用浏览器管理器的浏览器路径
+            browser_path = self.browser_path
+            
+            if browser_name == "chromium":
+                # 检查 Chromium 可执行文件
+                chromium_dirs = list(browser_path.glob('chromium-*'))
+                if chromium_dirs:
+                    for chromium_dir in chromium_dirs:
+                        chrome_exe = chromium_dir / 'chrome-win' / 'chrome.exe'
+                        if chrome_exe.exists():
+                            logger.info(f"找到chromium浏览器: {chrome_exe}")
+                            return True
+                        chrome_exe_alt = chromium_dir / 'chrome-win' / 'chrome'
+                        if chrome_exe_alt.exists():
+                            logger.info(f"找到chromium浏览器: {chrome_exe_alt}")
+                            return True
+                logger.warning(f"未找到chromium浏览器可执行文件，检查路径: {browser_path}")
+                return False
+            elif browser_name == "firefox":
+                firefox_paths = [
+                    browser_path / 'firefox-*' / 'firefox' / 'firefox.exe',
+                    browser_path / 'firefox-*' / 'firefox' / 'firefox',
+                ]
+                for path_pattern in firefox_paths:
+                    if list(browser_path.glob('firefox-*')):
+                        return True
+            elif browser_name == "webkit":
+                webkit_paths = [
+                    browser_path / 'webkit-*' / 'pw_run.sh',
+                    browser_path / 'webkit-*' / 'Playwright.app',
+                ]
+                for path_pattern in webkit_paths:
+                    if list(browser_path.glob('webkit-*')):
+                        return True
+            
+            logger.info(f"{browser_name} 浏览器文件检查完成")
+            return True  # 假设文件存在，让实际运行时处理错误
+        except Exception as e:
+            logger.warning(f"检查 {browser_name} 浏览器文件时出错: {e}")
+            return True  # 假设存在，让实际运行时处理
+    
+    def _copy_packaged_browser(self) -> bool:
+        """从打包的浏览器目录复制到用户目录"""
+        try:
+            import sys
+            import shutil
+            
+            # 检查是否在打包环境中
+            if not getattr(sys, 'frozen', False):
+                logger.info("非打包环境，跳过浏览器复制")
+                return False
+            
+            # 获取打包的浏览器路径
+            packaged_browser_path = Path(sys._MEIPASS) / 'playwright-browsers'
+            if not packaged_browser_path.exists():
+                logger.warning(f"打包的浏览器目录不存在: {packaged_browser_path}")
+                return False
+            
+            # 确保用户目录存在
+            user_browser_path = self.browser_path
+            user_browser_path.mkdir(parents=True, exist_ok=True)
+            
+            logger.info(f"开始复制浏览器从 {packaged_browser_path} 到 {user_browser_path}")
+            
+            # 复制整个浏览器目录
+            for item in packaged_browser_path.iterdir():
+                dest_item = user_browser_path / item.name
+                if dest_item.exists():
+                    logger.info(f"目标已存在，跳过: {dest_item}")
+                    continue
+                
+                if item.is_dir():
+                    logger.info(f"复制目录: {item.name}")
+                    shutil.copytree(item, dest_item)
+                else:
+                    logger.info(f"复制文件: {item.name}")
+                    shutil.copy2(item, dest_item)
+            
+            logger.info("浏览器复制完成")
+            return True
+            
+        except Exception as e:
+            logger.error(f"复制浏览器时发生错误: {e}")
             return False
     
     def install_playwright(self) -> bool:
@@ -116,7 +238,7 @@ class BrowserManager:
     def install_browsers(self, browsers: List[str] = None) -> bool:
         """安装Playwright浏览器"""
         if browsers is None:
-            browsers = ["chromium"]  # 默认只安装chromium
+            browsers = ["chromium"]  # 使用chromium版本
         
         try:
             logger.info(f"开始安装浏览器: {browsers}")
@@ -158,13 +280,37 @@ class BrowserManager:
                 logger.error("Playwright安装失败")
                 return False
         
-        # 2. 检查并安装浏览器
+        # 2. 检查是否在异步环境中
+        try:
+            import asyncio
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                logger.warning("在异步环境中，需要安装浏览器但无法验证启动")
+                # 在异步环境中，检查文件是否存在
+                if not self._check_browser_files("chromium"):
+                    logger.warning("chromium 浏览器文件不存在，尝试从打包的浏览器复制")
+                    # 尝试从打包的浏览器目录复制到用户目录
+                    if self._copy_packaged_browser():
+                        logger.info("成功从打包文件复制浏览器到用户目录")
+                        return True
+                    else:
+                        logger.warning("复制浏览器失败，将在实际使用时处理")
+                        return True  # 返回True，让爬虫启动时处理
+                
+                # 浏览器文件存在
+                logger.info("chromium 浏览器已存在（异步环境）")
+                return True
+        except RuntimeError:
+            # 没有运行中的事件循环，可以正常执行
+            pass
+        
+        # 3. 检查并安装浏览器（仅在非异步环境中）
         if not self.check_browser_installation("chromium"):
             if not self.install_browsers(["chromium"]):
                 logger.error("浏览器安装失败")
                 return False
         
-        # 3. 验证安装
+        # 4. 验证安装
         if self.check_browser_installation("chromium"):
             logger.info("浏览器环境设置完成")
             return True

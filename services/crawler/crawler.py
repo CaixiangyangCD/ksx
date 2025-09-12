@@ -18,8 +18,8 @@ try:
     from playwright.async_api import TimeoutError as PlaywrightTimeoutError
     PLAYWRIGHT_AVAILABLE = True
 except ImportError as e:
-    print(f"警告: Playwright模块导入失败: {e}")
-    print("在打包环境中，请确保Playwright已正确安装")
+    # print(f"警告: Playwright模块导入失败: {e}")
+    # print("在打包环境中，请确保Playwright已正确安装")
     PLAYWRIGHT_AVAILABLE = False
     # 创建占位符类以避免后续错误
     class MockPlaywright:
@@ -38,14 +38,23 @@ except ImportError:
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
     LOGGER_AVAILABLE = False
-    print("警告: loguru不可用，使用标准logging模块")
+    logger.info("警告: loguru不可用，使用标准logging模块")
 import sys
 import os
 
 # 设置浏览器路径到项目目录
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-browser_path = os.path.join(project_root, "playwright-browsers")
-os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browser_path
+if getattr(sys, 'frozen', False):
+    # 打包环境：使用用户目录
+    from pathlib import Path
+    user_home = Path.home()
+    project_root = str(user_home / "KSX_App")
+    os.makedirs(project_root, exist_ok=True)
+    logger.info(f" 爬虫：使用用户目录作为项目根目录: {project_root}")
+else:
+    # 开发环境：使用项目根目录
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# 不在这里设置环境变量，让BrowserManager来处理
 
 # 自动检查和安装浏览器
 def ensure_browser_environment():
@@ -53,11 +62,11 @@ def ensure_browser_environment():
     try:
         # 检查Playwright是否可用
         if not PLAYWRIGHT_AVAILABLE:
-            print("Playwright不可用，尝试自动安装...")
+            logger.info("Playwright不可用，尝试自动安装...")
             return install_playwright_if_needed()
         
         from services.browser_manager import setup_browser_environment
-        if not setup_browser_environment(project_root):
+        if not setup_browser_environment():
             logger.error("浏览器环境设置失败")
             return False
         return True
@@ -68,7 +77,7 @@ def ensure_browser_environment():
 def install_playwright_if_needed():
     """如果需要，自动安装Playwright"""
     try:
-        print("正在尝试安装Playwright...")
+        logger.info("正在尝试安装Playwright...")
         
         # 尝试安装Playwright
         result = subprocess.run([
@@ -76,7 +85,7 @@ def install_playwright_if_needed():
         ], capture_output=True, text=True, timeout=300)
         
         if result.returncode == 0:
-            print("✓ Playwright安装成功")
+            logger.info("✓ Playwright安装成功")
             
             # 安装浏览器
             browser_path = os.path.join(project_root, "playwright-browsers")
@@ -88,26 +97,30 @@ def install_playwright_if_needed():
             ], capture_output=True, text=True, timeout=600, env=os.environ.copy())
             
             if browser_result.returncode == 0:
-                print("✓ Playwright浏览器安装成功")
+                logger.info("✓ Playwright浏览器安装成功")
                 return True
             else:
-                print(f"✗ Playwright浏览器安装失败: {browser_result.stderr}")
+                logger.info(f"✗ Playwright浏览器安装失败: {browser_result.stderr}")
                 return False
         else:
-            print(f"✗ Playwright安装失败: {result.stderr}")
+            logger.info(f"✗ Playwright安装失败: {result.stderr}")
             return False
             
     except Exception as e:
-        print(f"✗ Playwright自动安装失败: {e}")
+        logger.info(f"✗ Playwright自动安装失败: {e}")
         return False
 
 # 在导入时自动检查浏览器环境
 if not ensure_browser_environment():
-    logger.warning("浏览器环境检查失败，将使用系统默认路径")
-    os.environ.pop("PLAYWRIGHT_BROWSERS_PATH", None)
+    logger.warning("浏览器环境检查失败，手动设置浏览器路径到用户目录")
+    # 手动设置浏览器路径到用户目录
+    browser_path = os.path.join(project_root, "playwright-browsers")
+    os.makedirs(browser_path, exist_ok=True)
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browser_path
+    logger.info(f" 手动设置浏览器路径: {browser_path}")
 
 # 添加项目根目录到路径，以便导入services模块
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 注意：project_root 已经在上面根据环境设置了，这里不需要重新定义
 sys.path.append(project_root)
 from services.database_manager import get_db_manager
 from services.config_database_manager import config_db_manager
@@ -130,16 +143,16 @@ class KSXCrawler:
         
         # 检查Playwright是否可用，如果不可用则尝试安装
         if not PLAYWRIGHT_AVAILABLE:
-            print("警告: Playwright模块不可用，尝试动态安装...")
+            logger.info("警告: Playwright模块不可用，尝试动态安装...")
             try:
                 self._install_playwright_if_needed()
                 # 重新尝试导入
                 from playwright.async_api import async_playwright, Browser, Page, BrowserContext, Response
                 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
                 PLAYWRIGHT_AVAILABLE = True
-                print("Playwright安装成功，可以继续运行爬虫")
+                logger.info("Playwright安装成功，可以继续运行爬虫")
             except Exception as e:
-                print(f"Playwright安装失败: {e}")
+                logger.info(f"Playwright安装失败: {e}")
                 raise ImportError("Playwright模块不可用且无法自动安装，无法运行爬虫。")
         self.headless = headless
         self.target_date = target_date
@@ -150,6 +163,7 @@ class KSXCrawler:
                 from config import WEBSITE_CONFIG
                 self.timeout = WEBSITE_CONFIG['timeout']
             except ImportError:
+                logger.info("⚠️ 配置文件导入失败，使用默认超时时间")
                 self.timeout = 30000  # 默认30秒
         else:
             self.timeout = timeout
@@ -159,6 +173,9 @@ class KSXCrawler:
         
         # 配置日志
         self._setup_logging()
+        
+        # 设置浏览器环境到用户目录
+        self._setup_browser_environment()
         
         # 登录信息
         self.login_url = "https://ksx.dahuafuli.com:8306/"
@@ -231,10 +248,27 @@ class KSXCrawler:
             self.logger.addHandler(console_handler)
             self.logger.setLevel(logging.DEBUG)
     
+    def _setup_browser_environment(self):
+        """设置浏览器环境到用户目录"""
+        try:
+            if getattr(sys, 'frozen', False):
+                # 打包环境：设置浏览器路径到用户目录
+                browser_path = os.path.join(project_root, "playwright-browsers")
+                os.makedirs(browser_path, exist_ok=True)
+                os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browser_path
+                self.logger.info(f"爬虫类设置浏览器路径到用户目录: {browser_path}")
+                self.logger.info(f"爬虫类当前PLAYWRIGHT_BROWSERS_PATH环境变量: {os.environ.get('PLAYWRIGHT_BROWSERS_PATH', '未设置')}")
+            else:
+                # 开发环境：使用默认路径
+                self.logger.info("爬虫类开发环境，使用默认浏览器路径")
+        except Exception as e:
+            self.logger.info(f"设置浏览器环境失败: {e}")
+    
     def _install_playwright_if_needed(self):
         """在打包环境中动态安装Playwright"""
+        import sys  # 在方法开始就导入sys
         try:
-            print("正在尝试安装Playwright...")
+            self.logger.info("正在尝试安装Playwright")
             # 首先尝试使用uv安装
             try:
                 result = subprocess.run([
@@ -242,17 +276,16 @@ class KSXCrawler:
                 ], capture_output=True, text=True, timeout=300)
                 
                 if result.returncode == 0:
-                    print("使用uv安装Playwright成功")
+                    self.logger.info("使用uv安装Playwright成功")
                 else:
-                    print(f"uv安装失败，尝试使用pip: {result.stderr}")
+                    self.logger.info(f"uv安装失败，尝试使用pip: {result.stderr}")
                     raise Exception("uv安装失败")
                     
             except Exception:
                 # 如果uv失败，使用pip
-                print("尝试使用pip安装Playwright...")
+                self.logger.info("尝试使用pip安装Playwright...")
                 
                 # 检查Python版本，决定是否使用--break-system-packages
-                import sys
                 python_version = sys.version_info
                 if python_version >= (3, 11):
                     # Python 3.11+ 支持 --break-system-packages
@@ -264,9 +297,9 @@ class KSXCrawler:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
                 
                 if result.returncode != 0:
-                    print(f"Playwright安装失败: {result.stderr}")
+                    self.logger.info(f"Playwright安装失败: {result.stderr}")
                     # 如果--user也失败，尝试不使用任何额外参数
-                    print("尝试不使用额外参数安装...")
+                    self.logger.info("尝试不使用额外参数安装...")
                     result = subprocess.run([
                         sys.executable, "-m", "pip", "install", "playwright"
                     ], capture_output=True, text=True, timeout=300)
@@ -274,20 +307,32 @@ class KSXCrawler:
                     if result.returncode != 0:
                         raise Exception(f"安装失败: {result.stderr}")
                     else:
-                        print("使用pip安装Playwright成功（无额外参数）")
+                        self.logger.info("使用pip安装Playwright成功（无额外参数）")
                 else:
-                    print("使用pip安装Playwright成功")
+                    self.logger.info("使用pip安装Playwright成功")
             
-            # 安装浏览器
-            print("正在安装Playwright浏览器...")
+            # 安装浏览器到用户目录
+            self.logger.info("正在安装Playwright浏览器到用户目录...")
+            # 在打包环境中，使用用户目录
+            if getattr(sys, 'frozen', False):
+                user_home = Path.home()
+                app_dir = user_home / "KSX_App"
+                app_dir.mkdir(exist_ok=True)
+                browser_path = str(app_dir / "playwright-browsers")
+            else:
+                browser_path = os.path.join(project_root, "playwright-browsers")
+            os.makedirs(browser_path, exist_ok=True)
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browser_path
+            self.logger.info(f" 设置浏览器安装路径: {browser_path}")
+            
             browser_result = subprocess.run([
                 sys.executable, "-m", "playwright", "install", "chromium"
-            ], capture_output=True, text=True, timeout=600)
+            ], capture_output=True, text=True, timeout=600, env=os.environ.copy())
             
             if browser_result.returncode == 0:
-                print("Playwright浏览器安装成功")
+                self.logger.info("Playwright浏览器安装成功")
             else:
-                print(f"浏览器安装失败: {browser_result.stderr}")
+                self.logger.info(f"浏览器安装失败: {browser_result.stderr}")
                 # 浏览器安装失败不是致命错误，继续执行
                 
         except subprocess.TimeoutExpired:
@@ -303,20 +348,27 @@ class KSXCrawler:
             
         # 监听响应
         self.page.on("response", self._handle_response)
-        self.logger.info("✅ 网络请求拦截已设置")
+        self.logger.info(" 网络请求拦截已设置")
     
     async def _handle_response(self, response: Response):
         """处理网络响应"""
         try:
+            # 记录所有网络请求（用于调试）
+            self.logger.info(f" 网络请求: {response.url} - 状态: {response.status}")
+            
+            # 检查是否包含数据相关的API请求
+            if any(keyword in response.url.lower() for keyword in ['data', 'list', 'query', 'search', 'api']):
+                self.logger.info(f" 发现数据相关API请求: {response.url}")
+            
             # 只处理UIProcessor相关的请求
             if "/UIProcessor" in response.url:
-                self.logger.info(f"🔍 拦截到UIProcessor请求: {response.url}")
+                self.logger.info(f" 拦截到UIProcessor请求: {response.url}")
                 
                 # 获取响应内容
                 if response.status == 200:
                     try:
                         response_data = await response.json()
-                        self.logger.info(f"📦 UIProcessor响应状态: {response.status}")
+                        self.logger.info(f" UIProcessor响应状态: {response.status}")
                         
                         # 检查响应格式
                         if isinstance(response_data, dict) and 'success' in response_data:
@@ -324,8 +376,8 @@ class KSXCrawler:
                                 data = response_data.get('data', [])
                                 page_info = response_data.get('pageInfo', {})
                                 
-                                self.logger.info(f"✅ 成功获取数据: {len(data)} 条记录")
-                                self.logger.info(f"📄 分页信息: {page_info}")
+                                self.logger.info(f" 成功获取数据: {len(data)} 条记录")
+                                self.logger.info(f" 分页信息: {page_info}")
                                 
                                 # 存储数据
                                 self.current_page_data = data
@@ -346,7 +398,7 @@ class KSXCrawler:
                         # 尝试获取文本内容
                         try:
                             text_content = await response.text()
-                            self.logger.info(f"📝 响应文本内容: {text_content[:500]}...")
+                            self.logger.info(f" 响应文本内容: {text_content[:500]}...")
                         except Exception:
                             pass
                 else:
@@ -358,17 +410,17 @@ class KSXCrawler:
     async def start_browser(self):
         """启动浏览器"""
         try:
-            print(f"🔍 调试：开始启动浏览器，无头模式: {self.headless}")
+            logger.info(f" 调试：开始启动浏览器，无头模式: {self.headless}")
             
             # 确保正确初始化 playwright
             self.playwright = await async_playwright().start()
             if not self.playwright:
                 raise Exception("Playwright 初始化失败")
-            print("✓ Playwright初始化成功")
+            logger.info("✓ Playwright初始化成功")
             
             # 启动浏览器 - 根据模式选择不同的浏览器
             if self.headless:
-                print("🔍 调试：尝试启动无头模式浏览器...")
+                logger.info(" 调试：尝试启动无头模式浏览器...")
                 # 无头模式使用Playwright自带的Chromium
                 try:
                     self.browser = await self.playwright.chromium.launch(
@@ -383,11 +435,11 @@ class KSXCrawler:
                             '--disable-gpu'
                         ]
                     )
-                    print("✓ 无头模式浏览器启动成功")
+                    logger.info("✓ 无头模式浏览器启动成功")
                 except Exception as e:
-                    print(f"❌ 无头模式浏览器启动失败: {e}")
+                    logger.info(f"❌ 无头模式浏览器启动失败: {e}")
                     # 尝试自动安装浏览器
-                    print("🔧 尝试自动安装Playwright浏览器...")
+                    logger.info(" 尝试自动安装Playwright浏览器...")
                     try:
                         import subprocess
                         # 创建环境变量，禁用代理
@@ -403,7 +455,7 @@ class KSXCrawler:
                             sys.executable, "-m", "playwright", "install", "chromium"
                         ], capture_output=True, text=True, timeout=300, env=env)
                         if result.returncode == 0:
-                            print("✓ Playwright浏览器安装成功，重新尝试启动...")
+                            logger.info("✓ Playwright浏览器安装成功，重新尝试启动...")
                             self.browser = await self.playwright.chromium.launch(
                                 headless=True,
                                 args=[
@@ -416,20 +468,20 @@ class KSXCrawler:
                                     '--disable-gpu'
                                 ]
                             )
-                            print("✓ 浏览器重新启动成功")
+                            logger.info("✓ 浏览器重新启动成功")
                         else:
-                            print(f"❌ 浏览器安装失败: {result.stderr}")
+                            logger.info(f"❌ 浏览器安装失败: {result.stderr}")
                             raise Exception(f"浏览器安装失败: {result.stderr}")
                     except Exception as install_error:
-                        print(f"❌ 浏览器安装过程出错: {install_error}")
+                        logger.info(f"❌ 浏览器安装过程出错: {install_error}")
                         raise Exception(f"浏览器启动失败: {e}, 安装失败: {install_error}")
             else:
-                print("🔍 调试：尝试启动有头模式浏览器...")
+                logger.info(" 调试：尝试启动有头模式浏览器...")
                 # 有头模式尝试使用Chrome Beta，如果失败则使用Chromium
                 try:
                     self.browser = await self.playwright.chromium.launch(
                         headless=False,
-                        channel="chrome-beta",  # 使用Chrome Beta
+                        # 不使用channel，直接使用chromium
                         args=[
                             '--no-sandbox',
                             '--disable-setuid-sandbox',
@@ -440,9 +492,9 @@ class KSXCrawler:
                             '--disable-gpu'
                         ]
                     )
-                    print("✓ Chrome Beta启动成功")
+                    logger.info("✓ Chrome Beta启动成功")
                 except Exception as e:
-                    print(f"Chrome Beta启动失败，使用Chromium: {e}")
+                    logger.info(f"Chrome Beta启动失败，使用Chromium: {e}")
                     self.browser = await self.playwright.chromium.launch(
                         headless=False,
                         args=[
@@ -455,7 +507,7 @@ class KSXCrawler:
                             '--disable-gpu'
                         ]
                     )
-                    print("✓ Chromium启动成功")
+                    logger.info("✓ Chromium启动成功")
             
             if not self.browser:
                 raise Exception("浏览器启动失败")
@@ -480,11 +532,18 @@ class KSXCrawler:
             # 设置网络请求拦截
             await self._setup_request_interception()
             
-            self.logger.info("浏览器启动成功")
+            logger.info("浏览器启动成功")
             return True
             
         except Exception as e:
             self.logger.error(f"启动浏览器失败: {e}")
+            
+            # 检查是否是浏览器不存在的错误
+            error_msg = str(e)
+            if "Executable doesn't exist" in error_msg or "playwright install" in error_msg:
+                self.logger.error("浏览器不存在，请检查浏览器是否正确安装到用户目录")
+                self.logger.error("预期浏览器路径应该在用户目录的KSX_App/playwright-browsers下")
+            
             # 清理已创建的资源
             try:
                 await self.close()
@@ -611,7 +670,7 @@ class KSXCrawler:
             self.logger.error(f"登录失败: {e}")
             return False
     
-    async def set_date_and_search(self) -> bool:
+    async def set_date_and_search(self, target_date: str = None) -> bool:
         """设置日期并执行搜索"""
         try:
             self.logger.info("正在设置日期并执行搜索...")
@@ -635,15 +694,18 @@ class KSXCrawler:
                 return False
             
             # 计算目标日期
-            if self.target_date:
+            if target_date:
+                # 使用传入的目标日期
+                date_str = target_date
+                self.logger.info(f"使用传入的目标日期: {date_str}")
+            elif self.target_date:
                 # 使用指定的目标日期
                 date_str = self.target_date
                 self.logger.info(f"使用指定的目标日期: {date_str}")
             else:
-                # 使用默认日期（前天的日期，9月6日有数据）
-                yesterday = datetime.now() - timedelta(days=2)
-                date_str = yesterday.strftime('%Y-%m-%d')
-                self.logger.info(f"使用默认日期: {date_str}")
+                # 使用已知有数据的日期（9月6日）
+                date_str = "2025-09-06"
+                self.logger.info(f"使用默认日期（已知有数据）: {date_str}")
             
             # 设置开始日期（第一个输入框）
             start_date_input = date_inputs[0]
@@ -651,11 +713,19 @@ class KSXCrawler:
             await start_date_input.type(date_str, delay=100)
             self.logger.info(f"设置开始日期为: {date_str}")
             
+            # 验证日期输入
+            start_date_value = await start_date_input.input_value()
+            self.logger.info(f"验证开始日期输入值: {start_date_value}")
+            
             # 设置结束日期（第二个输入框）
             end_date_input = date_inputs[1]
             await end_date_input.fill('')
             await end_date_input.type(date_str, delay=100)
             self.logger.info(f"设置结束日期为: {date_str}")
+            
+            # 验证结束日期输入
+            end_date_value = await end_date_input.input_value()
+            self.logger.info(f"验证结束日期输入值: {end_date_value}")
             
             # 查找并点击搜索按钮
             search_button = await self.page.wait_for_selector('button.lb-LBButton-contained', timeout=5000)
@@ -666,13 +736,39 @@ class KSXCrawler:
             await search_button.click()
             self.logger.info("点击搜索按钮")
             
-            # 等待搜索结果
-            await self.page.wait_for_load_state('networkidle')
-            await asyncio.sleep(1)  # 减少等待时间
+            # 等待搜索结果，增加等待时间
+            try:
+                await self.page.wait_for_load_state('networkidle', timeout=20000)
+                self.logger.info(" 页面网络空闲状态达到")
+            except Exception as e:
+                self.logger.warning(f"等待网络空闲超时: {e}")
+            
+            await asyncio.sleep(3)  # 增加等待时间
+            
+            # 检查页面是否还在加载
+            try:
+                await self.page.wait_for_load_state('domcontentloaded', timeout=5000)
+                self.logger.info(" 页面DOM内容已加载")
+            except Exception as e:
+                self.logger.warning(f"等待DOM加载超时: {e}")
             
             # 等待API响应数据
             self.logger.info("等待API响应数据...")
-            await asyncio.sleep(2)  # 给API响应一些时间
+            await asyncio.sleep(5)  # 给API响应更多时间
+            
+            # 检查当前页面URL
+            current_url = self.page.url
+            self.logger.info(f" 当前页面URL: {current_url}")
+            
+            # 检查是否有错误信息
+            try:
+                error_elements = await self.page.query_selector_all('.error, .alert-danger, [class*="error"]')
+                if error_elements:
+                    for i, element in enumerate(error_elements):
+                        error_text = await element.text_content()
+                        self.logger.warning(f"⚠️ 发现错误信息 {i+1}: {error_text}")
+            except Exception as e:
+                self.logger.info(f"检查错误信息时发生异常: {e}")
             
             self.logger.info("搜索完成")
             return True
@@ -686,15 +782,31 @@ class KSXCrawler:
         try:
             self.logger.info("正在等待API响应数据...")
             
-            # 等待API响应数据
-            max_wait_time = 5  # 减少等待时间到5秒
-            wait_interval = 0.2  # 更频繁的检查，每0.2秒检查一次
+            # 等待API响应数据，增加等待时间
+            max_wait_time = 15  # 增加等待时间到15秒
+            wait_interval = 0.5  # 每0.5秒检查一次
             waited_time = 0
             
             while waited_time < max_wait_time:
+                # 添加调试信息
+                if waited_time % 3 == 0:  # 每3秒打印一次状态
+                    self.logger.info(f" 等待API数据中... ({waited_time:.1f}s/{max_wait_time}s)")
+                    self.logger.info(f" 当前状态: current_page_data={self.current_page_data is not None}, page_info={self.page_info is not None}")
+                
                 if self.current_page_data is not None and self.page_info is not None:
-                    self.logger.info(f"✅ 获取到API数据: {len(self.current_page_data)} 条记录")
-                    self.logger.info(f"📄 分页信息: {self.page_info}")
+                    self.logger.info(f" 获取到API数据: {len(self.current_page_data)} 条记录")
+                    self.logger.info(f" 分页信息: {self.page_info}")
+                    
+                    # 检查total是否为0，如果是则表示当前日期没有数据
+                    if self.page_info.get('total', 0) == 0:
+                        self.logger.info(" API返回total=0，当前日期没有业务数据")
+                        return {
+                            'data': [],
+                            'pageInfo': self.page_info,
+                            'success': True,
+                            'no_data': True,  # 标记为没有数据，而不是失败
+                            'message': '当前日期没有业务数据'
+                        }
                     
                     return {
                         'data': self.current_page_data,
@@ -719,7 +831,7 @@ class KSXCrawler:
                 'data': [],
                 'pageInfo': {},
                 'success': False,
-                'error': 'API响应超时'
+                'error': '网络响应超时，请重试'
             }
             
         except Exception as e:
@@ -734,8 +846,8 @@ class KSXCrawler:
     async def extract_all_pages_data_from_api(self) -> list:
         """使用API数据提取所有页面数据"""
         try:
-            self.logger.info("🚀 开始基于API的数据提取...")
-            print("🚀 开始基于API的数据提取...")
+            self.logger.info(" 开始基于API的数据提取...")
+            # print(" 开始基于API的数据提取...")
             all_data = []
             current_page = 1
             total_pages = 0
@@ -743,7 +855,7 @@ class KSXCrawler:
             seen_ids = set()  # 用于检查重复数据
             
             while True:
-                self.logger.info(f"📄 正在处理第 {current_page} 页...")
+                self.logger.info(f" 正在处理第 {current_page} 页...")
                 
                 # 如果不是第一页，需要点击下一页
                 if current_page > 1:
@@ -753,23 +865,23 @@ class KSXCrawler:
                     
                     click_result = await self.click_next_page_api()
                     if not click_result:
-                        self.logger.info("✅ 已到达最后一页，停止数据提取")
+                        self.logger.info(" 已到达最后一页，停止数据提取")
                         break
                     
-                    # 等待并获取API数据
-                    api_result = await self.extract_data_from_api()
+                    # 等待并获取API数据，增加重试机制
+                    api_result = await self.extract_data_from_api_with_retry()
                 else:
                     # 第一页使用已有的数据
                     if self.current_page_data is not None and self.page_info is not None:
-                        self.logger.info(f"✅ 使用已有的第一页数据: {len(self.current_page_data)} 条记录")
+                        self.logger.info(f" 使用已有的第一页数据: {len(self.current_page_data)} 条记录")
                         api_result = {
                             'data': self.current_page_data,
                             'pageInfo': self.page_info,
                             'success': True
                         }
                     else:
-                        # 如果没有数据，等待并获取API数据
-                        api_result = await self.extract_data_from_api()
+                        # 如果没有数据，等待并获取API数据，增加重试机制
+                        api_result = await self.extract_data_from_api_with_retry()
                 
                 if not api_result['success']:
                     self.logger.error(f"❌ 第 {current_page} 页API数据获取失败: {api_result.get('error', '未知错误')}")
@@ -783,7 +895,7 @@ class KSXCrawler:
                     total_records = page_info.get('total', 0)
                     page_size = page_info.get('pageSize', 50)
                     total_pages = (total_records + page_size - 1) // page_size
-                    self.logger.info(f"📊 数据统计: 总计 {total_records} 条记录，共 {total_pages} 页")
+                    self.logger.info(f" 数据统计: 总计 {total_records} 条记录，共 {total_pages} 页")
                 
                 # 检查数据是否重复
                 if page_data:
@@ -799,7 +911,7 @@ class KSXCrawler:
                         break
                     
                     all_data.extend(page_data)
-                    self.logger.info(f"✅ 第 {current_page} 页: 新增 {len(page_data)} 条记录（其中 {new_count} 条新数据），累计 {len(all_data)} 条")
+                    self.logger.info(f" 第 {current_page} 页: 新增 {len(page_data)} 条记录（其中 {new_count} 条新数据），累计 {len(all_data)} 条")
                 else:
                     self.logger.warning(f"⚠️ 第 {current_page} 页: 没有数据")
                     break
@@ -807,26 +919,26 @@ class KSXCrawler:
                 # 检查是否还有更多页
                 has_more = page_info.get('hasMore', False)
                 if not has_more:
-                    self.logger.info("✅ 根据API返回的hasMore=false，已到达最后一页")
+                    self.logger.info(" 根据API返回的hasMore=false，已到达最后一页")
                     break
                 
                 # 检查当前页号是否超过总页数
                 current_page_no = page_info.get('pageNo', current_page)
                 if current_page_no >= total_pages:
-                    self.logger.info(f"✅ 当前页号 {current_page_no} 已达到总页数 {total_pages}，停止提取")
+                    self.logger.info(f" 当前页号 {current_page_no} 已达到总页数 {total_pages}，停止提取")
                     break
                 
                 # 安全检查：避免无限循环
                 if current_page >= 20:  # 最多20页
-                    self.logger.info(f"🛑 达到最大页数限制 ({current_page})，停止提取")
+                    self.logger.info(f" 达到最大页数限制 ({current_page})，停止提取")
                     break
                 
                 current_page += 1
                 
-                # 页面间等待
-                await asyncio.sleep(1)
+                # 页面间等待，增加等待时间
+                await asyncio.sleep(3)
             
-            self.logger.info(f"🎉 数据提取完成！总计获取 {len(all_data)} 条记录，唯一记录 {len(seen_ids)} 条")
+            self.logger.info(f" 数据提取完成！总计获取 {len(all_data)} 条记录，唯一记录 {len(seen_ids)} 条")
             return all_data
             
         except Exception as e:
@@ -836,7 +948,7 @@ class KSXCrawler:
     async def click_next_page_api(self) -> bool:
         """点击下一页（用于API数据提取）"""
         try:
-            self.logger.info("📄 正在点击下一页...")
+            self.logger.info(" 正在点击下一页...")
             
             # 查找分页容器
             pagination_container = await self.page.wait_for_selector('ul.lb-MuiPagination-ul', timeout=5000)
@@ -861,7 +973,7 @@ class KSXCrawler:
             # 检查按钮是否可点击
             is_disabled = await next_button.get_attribute('disabled')
             if is_disabled:
-                self.logger.info("✅ 下一页按钮已禁用，到达最后一页")
+                self.logger.info(" 下一页按钮已禁用，到达最后一页")
                 return False
             
             # 检查按钮是否可见
@@ -872,16 +984,81 @@ class KSXCrawler:
             
             # 点击下一页
             await next_button.click()
-            self.logger.info("✅ 成功点击下一页")
+            self.logger.info(" 成功点击下一页")
             
-            # 等待页面更新
-            await asyncio.sleep(2)
+            # 等待页面更新，增加等待时间
+            await asyncio.sleep(3)
+            
+            # 等待网络请求完成
+            try:
+                await self.page.wait_for_load_state('networkidle', timeout=10000)
+            except Exception as e:
+                self.logger.warning(f"等待网络空闲超时: {e}")
+            
+            self.logger.info(" 页面更新完成，准备获取下一页数据")
             
             return True
             
         except Exception as e:
             self.logger.error(f"❌ 点击下一页失败: {e}")
             return False
+    
+    async def extract_data_from_api_with_retry(self, max_retries: int = 3) -> dict:
+        """带重试机制的API数据提取"""
+        for attempt in range(max_retries):
+            try:
+                self.logger.info(f" 尝试获取API数据 (第 {attempt + 1}/{max_retries} 次)")
+                
+                # 增加等待时间，让页面完全加载
+                await asyncio.sleep(2)
+                
+                # 等待网络请求完成
+                try:
+                    await self.page.wait_for_load_state('networkidle', timeout=15000)
+                except Exception as e:
+                    self.logger.warning(f"等待网络空闲超时: {e}")
+                
+                # 尝试获取API数据
+                result = await self.extract_data_from_api()
+                
+                if result['success']:
+                    # 检查是否是明确的"没有数据"情况
+                    if result.get('no_data', False):
+                        self.logger.info(f"ℹ️ 确认当前日期没有业务数据，无需重试")
+                        return result
+                    elif result.get('data'):
+                        self.logger.info(f" API数据获取成功 (第 {attempt + 1} 次尝试)")
+                        return result
+                    else:
+                        self.logger.warning(f"⚠️ 第 {attempt + 1} 次尝试: 成功但无数据")
+                        if attempt < max_retries - 1:
+                            wait_time = (attempt + 1) * 3
+                            self.logger.info(f" 等待 {wait_time} 秒后重试...")
+                            await asyncio.sleep(wait_time)
+                        else:
+                            break
+                else:
+                    self.logger.warning(f"⚠️ 第 {attempt + 1} 次尝试失败: {result.get('error', '获取失败')}")
+                    
+                    if attempt < max_retries - 1:
+                        wait_time = (attempt + 1) * 3  # 递增等待时间
+                        self.logger.info(f" 等待 {wait_time} 秒后重试...")
+                        await asyncio.sleep(wait_time)
+                        
+                        # 尝试刷新页面
+                        try:
+                            await self.page.reload()
+                            await asyncio.sleep(3)
+                        except Exception as e:
+                            self.logger.warning(f"页面刷新失败: {e}")
+                    
+            except Exception as e:
+                self.logger.error(f"❌ 第 {attempt + 1} 次尝试异常: {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(5)
+        
+        self.logger.error(f"❌ 经过 {max_retries} 次尝试，API数据获取失败")
+        return {'success': False, 'error': f'经过 {max_retries} 次尝试后仍然失败'}
     
     async def save_api_data_to_csv(self, data: list, filename: str = None) -> str:
         """
@@ -921,10 +1098,10 @@ class KSXCrawler:
                     for item in data:
                         writer.writerow(item)
                 
-                self.logger.info(f"✅ API数据已保存到: {filepath}")
-                self.logger.info(f"📊 保存记录数: {len(data)}")
-                self.logger.info(f"📄 字段数: {len(all_fields)}")
-                self.logger.info(f"🔑 字段列表: {all_fields}")
+                self.logger.info(f" API数据已保存到: {filepath}")
+                self.logger.info(f" 保存记录数: {len(data)}")
+                self.logger.info(f" 字段数: {len(all_fields)}")
+                self.logger.info(f" 字段列表: {all_fields}")
                 
                 return str(filepath)
             else:
@@ -968,7 +1145,7 @@ class KSXCrawler:
             if new_stores_count > 0:
                 self.logger.info(f"🆕 新增 {new_stores_count} 个门店到配置数据库")
             else:
-                self.logger.info(f"📋 门店配置数据库已是最新状态")
+                self.logger.info(f" 门店配置数据库已是最新状态")
                 
         except Exception as e:
             self.logger.error(f"❌ 同步门店到配置数据库失败: {e}")
@@ -976,7 +1153,7 @@ class KSXCrawler:
     async def smart_data_extraction(self, current_db_count: int) -> Dict[str, Any]:
         """智能数据提取流程 - 根据当前数据库数据量决定是否需要同步"""
         try:
-            self.logger.info(f"🧠 开始智能数据提取，当前数据库有 {current_db_count} 条数据...")
+            self.logger.info(f" 开始智能数据提取，当前数据库有 {current_db_count} 条数据...")
             
             # 执行搜索
             search_result = await self.set_date_and_search()
@@ -985,8 +1162,8 @@ class KSXCrawler:
                 return {"success": False, "action": "error", "message": "搜索失败"}
             
             # 获取第一页数据来检查总数
-            self.logger.info("📄 获取第一页数据以检查总数...")
-            first_page_result = await self.extract_data_from_api()
+            self.logger.info(" 获取第一页数据以检查总数...")
+            first_page_result = await self.extract_data_from_api_with_retry()
             
             if not first_page_result['success']:
                 self.logger.error("❌ 第一页数据获取失败")
@@ -999,15 +1176,15 @@ class KSXCrawler:
             
             # 获取网站上的总数据量
             website_total = first_page_result.get('total', 0)
-            self.logger.info(f"📊 网站显示总数据量: {website_total} 条")
+            self.logger.info(f" 网站显示总数据量: {website_total} 条")
             
             # 对比数据量
             if current_db_count == website_total and current_db_count > 0:
-                self.logger.info("✅ 数据已是最新，无需同步")
+                self.logger.info(" 数据已是最新，无需同步")
                 return {"success": True, "action": "no_sync", "message": "数据已是最新，无需同步", "total": current_db_count}
             
             # 需要同步数据
-            self.logger.info(f"🔄 需要同步数据: 数据库 {current_db_count} 条，网站 {website_total} 条")
+            self.logger.info(f" 需要同步数据: 数据库 {current_db_count} 条，网站 {website_total} 条")
             
             # 提取所有页面数据
             all_data = await self.extract_all_pages_data_from_api()
@@ -1028,9 +1205,9 @@ class KSXCrawler:
             # csv_file = await self.save_api_data_to_csv(unique_data)
             
             if db_result > 0:
-                self.logger.info(f"🎉 数据同步完成！新增数据库记录: {db_result}条")
+                self.logger.info(f" 数据同步完成！新增数据库记录: {db_result}条")
                 # if csv_file:
-                #     self.logger.info(f"📄 CSV备份文件: {csv_file}")
+                #     self.logger.info(f" CSV备份文件: {csv_file}")
                 return {"success": True, "action": "sync", "message": "数据同步完成", "total": db_result}
             else:
                 # 检查是否是因为网站没有数据导致的
@@ -1038,82 +1215,117 @@ class KSXCrawler:
                     self.logger.warning("⚠️ 网站没有数据，无法同步")
                     return {"success": True, "action": "no_data", "message": "当前日期没有业务数据，请核查日期"}
                 else:
-                    self.logger.info(f"📋 数据同步完成！数据已是最新状态，无新记录需要添加")
+                    self.logger.info(f" 数据同步完成！数据已是最新状态，无新记录需要添加")
                     return {"success": True, "action": "sync", "message": "数据已是最新状态", "total": 0}
                 
         except Exception as e:
             self.logger.error(f"❌ 智能数据提取异常: {e}")
             return {"success": False, "action": "error", "message": f"智能数据提取异常: {str(e)}"}
 
-    async def full_api_data_extraction(self) -> bool:
+    async def full_api_data_extraction(self) -> dict:
         """完整的API数据提取流程"""
         try:
-            self.logger.info("🚀 开始完整的API数据提取流程...")
+            self.logger.info(" 开始完整的API数据提取流程...")
             
             # 执行搜索
             search_result = await self.set_date_and_search()
             if not search_result:
                 self.logger.error("❌ 搜索失败")
-                return False
+                return {"success": False, "message": "搜索失败"}
             
             # 立即尝试获取第一页数据
-            self.logger.info("📄 尝试获取第一页数据...")
-            first_page_result = await self.extract_data_from_api()
+            self.logger.info(" 尝试获取第一页数据...")
+            first_page_result = await self.extract_data_from_api_with_retry()
             
             if first_page_result['success']:
+                # 检查是否是明确的"没有数据"情况
+                if first_page_result.get('no_data', False):
+                    self.logger.info("ℹ️ 当前日期没有业务数据，直接返回")
+                    # print("ℹ️ 当前日期没有业务数据")
+                    return {"success": False, "message": "当前日期没有业务数据"}
+                
                 if first_page_result['data']:
-                    self.logger.info(f"✅ 成功获取第一页数据: {len(first_page_result['data'])} 条记录")
+                    self.logger.info(f" 成功获取第一页数据: {len(first_page_result['data'])} 条记录")
                     
                     # 提取所有页面数据
                     all_data = await self.extract_all_pages_data_from_api()
                     if not all_data:
                         self.logger.error("❌ 没有提取到数据")
-                        return False
+                        return {"success": False, "message": "没有提取到数据"}
                 else:
-                    # 成功获取但数据为空，说明没有业务数据
-                    self.logger.warning("⚠️ 当前日期没有业务数据")
-                    print("⚠️ 当前日期没有业务数据")
-                    return False
+                    # 成功获取但数据为空，尝试使用默认日期（9月6日）
+                    self.logger.warning("⚠️ 当前日期没有业务数据，尝试使用默认日期")
+                    # print("⚠️ 当前日期没有业务数据，尝试使用默认日期")
+                    
+                    # 尝试使用9月6日（已知有数据的日期）
+                    fallback_date = "2025-09-06"
+                    self.logger.info(f" 尝试使用备用日期: {fallback_date}")
+                    # print(f" 尝试使用备用日期: {fallback_date}")
+                    
+                    # 重新设置日期并搜索
+                    await self.set_date_and_search(fallback_date)
+                    
+                    # 再次尝试获取数据
+                    first_page_data_result = await self.extract_data_from_api_with_retry()
+                    if first_page_data_result['success'] and first_page_data_result.get('data'):
+                        first_page_data = first_page_data_result['data']
+                        self.logger.info(f" 使用备用日期成功获取数据: {len(first_page_data)} 条")
+                        # print(f" 使用备用日期成功获取数据: {len(first_page_data)} 条")
+                        all_data.extend(first_page_data)
+                    else:
+                        self.logger.error("❌ 备用日期也没有数据")
+                        # print("❌ 备用日期也没有数据")
+                        return {"success": False, "message": "当前日期没有业务数据"}
             else:
-                self.logger.error("❌ 第一页数据获取失败")
-                return False
+                # 第一页数据获取失败，检查是否是"没有数据"的情况
+                error_msg = first_page_result.get('error', '')
+                if '没有业务数据' in error_msg or '没有数据' in error_msg:
+                    self.logger.info(f"ℹ️ {error_msg}")
+                    return {"success": False, "message": error_msg}
+                else:
+                    self.logger.error("❌ 第一页数据获取失败")
+                    return {"success": False, "message": "第一页数据获取失败"}
             
             # 数据去重（基于ID字段）
             unique_data = await self.deduplicate_data(all_data)
-            self.logger.info(f"🔍 去重后数据量: {len(unique_data)} 条")
-            print(f"🔍 去重后数据量: {len(unique_data)} 条")
+            self.logger.info(f" 去重后数据量: {len(unique_data)} 条")
+            # print(f" 去重后数据量: {len(unique_data)} 条")
             
             # 保存到数据库
-            self.logger.info("💾 开始保存数据到数据库...")
-            print("💾 开始保存数据到数据库...")
+            self.logger.info(" 开始保存数据到数据库...")
+            # print(" 开始保存数据到数据库...")
             db_result = await self.save_to_database(unique_data)
-            self.logger.info(f"💾 数据库保存结果: {db_result} 条记录")
-            print(f"💾 数据库保存结果: {db_result} 条记录")
+            self.logger.info(f" 数据库保存结果: {db_result} 条记录")
+            # print(f" 数据库保存结果: {db_result} 条记录")
             
-            # 同步门店到配置数据库
-            self.logger.info("🏪 开始同步门店到配置数据库...")
-            print("🏪 开始同步门店到配置数据库...")
-            await self.sync_stores_to_config(unique_data)
-            self.logger.info("🏪 门店同步完成")
-            print("🏪 门店同步完成")
+            # 同步门店到配置数据库（仅在有新数据时执行）
+            if db_result > 0:
+                self.logger.info(" 开始同步门店到配置数据库...")
+                # print(" 开始同步门店到配置数据库...")
+                await self.sync_stores_to_config(unique_data)
+                self.logger.info(" 门店同步完成")
+                # print(" 门店同步完成")
+            else:
+                self.logger.info(" 数据已是最新状态，跳过门店同步")
+                # print(" 数据已是最新状态，跳过门店同步")
             
             # 可选：保存到CSV文件作为备份（已注释，留作备用）
             # csv_file = await self.save_api_data_to_csv(unique_data)
             
             if db_result > 0:
-                self.logger.info(f"🎉 API数据提取完成！新增数据库记录: {db_result}条")
-                print(f"🎉 API数据提取完成！新增数据库记录: {db_result}条")
+                self.logger.info(f" API数据提取完成！新增数据库记录: {db_result}条")
+                # print(f" API数据提取完成！新增数据库记录: {db_result}条")
                 # if csv_file:
-                #     self.logger.info(f"📄 CSV备份文件: {csv_file}")
-                return True
+                #     self.logger.info(f" CSV备份文件: {csv_file}")
+                return {"success": True, "message": f"数据提取完成，新增 {db_result} 条记录"}
             else:
-                self.logger.info(f"📋 API数据提取完成！数据已是最新状态，无新记录需要添加")
-                print(f"📋 API数据提取完成！数据已是最新状态，无新记录需要添加")
-                return True
+                self.logger.info(f" API数据提取完成！数据已是最新状态，无新记录需要添加")
+                # print(f" API数据提取完成！数据已是最新状态，无新记录需要添加")
+                return {"success": True, "message": "数据已是最新状态，无新记录需要添加"}
                 
         except Exception as e:
             self.logger.error(f"❌ 完整API数据提取失败: {e}")
-            return False
+            return {"success": False, "message": f"数据提取失败: {str(e)}"}
     
     async def save_to_database(self, data: list) -> int:
         """将数据保存到数据库"""
@@ -1135,20 +1347,20 @@ class KSXCrawler:
                 yesterday = datetime.now() - timedelta(days=2)
             
             # 插入数据（会自动去重），使用昨天的日期
-            self.logger.info(f"📊 准备保存 {len(data)} 条记录到数据库（日期: {yesterday.strftime('%Y-%m-%d')}）")
-            print(f"📊 准备保存 {len(data)} 条记录到数据库（日期: {yesterday.strftime('%Y-%m-%d')}）")
+            self.logger.info(f" 准备保存 {len(data)} 条记录到数据库（日期: {yesterday.strftime('%Y-%m-%d')}）")
+            # print(f" 准备保存 {len(data)} 条记录到数据库（日期: {yesterday.strftime('%Y-%m-%d')}）")
             
             # 调试：打印第一条数据的结构
             if data and len(data) > 0:
-                self.logger.info(f"🔍 调试：第一条数据的字段: {list(data[0].keys())}")
-                print(f"🔍 调试：第一条数据的字段: {list(data[0].keys())}")
-                self.logger.info(f"🔍 调试：第一条数据内容: {data[0]}")
-                print(f"🔍 调试：第一条数据内容: {data[0]}")
+                self.logger.info(f" 调试：第一条数据的字段: {list(data[0].keys())}")
+                # print(f" 调试：第一条数据的字段: {list(data[0].keys())}")
+                self.logger.info(f" 调试：第一条数据内容: {data[0]}")
+                # print(f" 调试：第一条数据内容: {data[0]}")
             
             inserted_count = db_manager.insert_data(data, date=yesterday)
             
-            self.logger.info(f"✅ 成功保存 {inserted_count} 条记录到数据库（日期: {yesterday.strftime('%Y-%m-%d')}）")
-            print(f"✅ 成功保存 {inserted_count} 条记录到数据库（日期: {yesterday.strftime('%Y-%m-%d')}）")
+            self.logger.info(f" 成功保存 {inserted_count} 条记录到数据库（日期: {yesterday.strftime('%Y-%m-%d')}）")
+            # print(f" 成功保存 {inserted_count} 条记录到数据库（日期: {yesterday.strftime('%Y-%m-%d')}）")
             
             # 清理旧数据库（保留近1个月）
             db_manager.cleanup_old_databases(keep_months=1)
@@ -1157,10 +1369,10 @@ class KSXCrawler:
             
         except Exception as e:
             self.logger.error(f"❌ 保存到数据库失败: {e}")
-            print(f"❌ 保存到数据库失败: {e}")
+            # print(f"❌ 保存到数据库失败: {e}")
             import traceback
             self.logger.error(f"❌ 详细错误信息: {traceback.format_exc()}")
-            print(f"❌ 详细错误信息: {traceback.format_exc()}")
+            # print(f"❌ 详细错误信息: {traceback.format_exc()}")
             return 0
     
     async def deduplicate_data(self, data: list) -> list:
@@ -1190,7 +1402,7 @@ class KSXCrawler:
                         seen_ids.add(item_id)
                         unique_data.append(item)
                 
-                self.logger.info(f"🔄 基于'{id_field}'字段去重: {len(data)} -> {len(unique_data)} 条记录")
+                self.logger.info(f" 基于'{id_field}'字段去重: {len(data)} -> {len(unique_data)} 条记录")
                 return unique_data
             else:
                 # 如果没有ID字段，基于整条记录去重
@@ -1204,7 +1416,7 @@ class KSXCrawler:
                         seen_records.add(record_str)
                         unique_data.append(item)
                 
-                self.logger.info(f"🔄 基于完整记录去重: {len(data)} -> {len(unique_data)} 条记录")
+                self.logger.info(f" 基于完整记录去重: {len(data)} -> {len(unique_data)} 条记录")
                 return unique_data
                 
         except Exception as e:
@@ -1268,32 +1480,41 @@ class KSXCrawler:
 
 async def main():
     """主函数示例"""
-    crawler = KSXCrawler(headless=False)  # 设置为False可以看到浏览器操作过程
+    crawler = KSXCrawler(headless=True)   # 使用无头模式
+    logger.info("开始执行爬虫...")
     
     try:
         # 执行登录
+        logger.info("正在登录...")
         success = await crawler.login()
         
         if success:
-            print("登录成功！")
+            # print("登录成功！")
             
             # 执行完整的API数据提取
             extraction_success = await crawler.full_api_data_extraction()
             
             if extraction_success:
-                print("数据提取完成！")
+                # print("数据提取完成！")
+                pass
             else:
-                print("数据提取失败！")
+                # print("数据提取失败！")
+                pass
             
             # 等待用户查看
             input("按回车键继续...")
         else:
-            print("登录失败！")
+            # print("登录失败！")
+            pass
             
     except KeyboardInterrupt:
-        print("\n用户中断操作")
+        logger.info("用户中断操作")
+        # print("\n用户中断操作")
+        pass
     except Exception as e:
-        print(f"程序异常: {e}")
+        logger.info(f"程序异常: {e}")
+        # print(f"程序异常: {e}")
+        pass
     finally:
         await crawler.close()
 

@@ -25,7 +25,7 @@ LOGIN_CONFIG = {
 
 # 浏览器配置
 BROWSER_CONFIG = {
-    'headless': True,  # 是否无头模式
+    'headless': True,   # 是否无头模式
     'browser_path': '../playwright-config/browsers',  # 自定义浏览器安装路径
     'viewport': {
         'width': 1920,
@@ -79,12 +79,13 @@ def get_config() -> Dict[str, Any]:
 if __name__ == "__main__":
     # 创建目录
     create_directories()
-    print("目录创建完成")
+    # print("目录创建完成")
     
     # 显示配置
     config = get_config()
-    print("\n当前配置:")
+    # print("\n当前配置:")
     for section, settings in config.items():
-        print(f"\n{section.upper()}:")
+        # print(f"\n{section.upper()}:")
         for key, value in settings.items():
-            print(f"  {key}: {value}")
+            # print(f"  {key}: {value}")
+            pass

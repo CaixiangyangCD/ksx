@@ -17,7 +17,7 @@ except ImportError:
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
     LOGGER_AVAILABLE = False
-    print("警告: loguru不可用，使用标准logging模块")
+    # print("警告: loguru不可用，使用标准logging模块")
 
 # 添加项目根目录到路径
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -28,30 +28,260 @@ from backend.models.schemas import SyncRequest, SyncResponse
 router = APIRouter(prefix="/api", tags=["sync"])
 
 
-async def run_crawler(target_date: str = None):
-    """运行爬虫程序"""
+async def run_crawler_internal(target_date: str = None):
+    """在打包环境中使用子进程运行爬虫，避免Qt冲突"""
     try:
-        if target_date:
-            logger.info(f"开始运行爬虫程序，目标日期: {target_date}")
-        else:
-            logger.info("开始运行爬虫程序，使用默认日期")
+        # 设置爬虫数据库目录环境变量
+        from services.database_manager import get_database_dir
+        main_db_dir = get_database_dir()
+        os.environ['KSX_DATABASE_DIR'] = main_db_dir
+        logger.info(f"设置爬虫数据库目录环境变量: {main_db_dir}")
         
+        # 在打包环境中，使用子进程运行爬虫，避免与Qt主线程冲突
+        import subprocess
+        
+        # 构建爬虫命令 - 使用外部Python进程完全隔离
+        if getattr(sys, 'frozen', False):
+            # 打包环境：直接在当前进程中执行爬虫，避免子进程问题
+            logger.info("打包环境：在当前进程中执行爬虫")
+            logger.info(f" 执行爬虫命令: 直接在当前进程中调用 services.crawler.main.main(target_date='{target_date}')")
+            
+            try:
+                # 设置环境变量
+                env = os.environ.copy()
+                env['KSX_DATABASE_DIR'] = main_db_dir
+                logger.info(f" 设置数据库目录环境变量: {main_db_dir}")
+                
+                # 调试系统路径信息
+                logger.info(f" 当前工作目录: {os.getcwd()}")
+                logger.info(f" sys.executable: {sys.executable}")
+                logger.info(f" hasattr(sys, '_MEIPASS'): {hasattr(sys, '_MEIPASS')}")
+                if hasattr(sys, '_MEIPASS'):
+                    logger.info(f" sys._MEIPASS: {sys._MEIPASS}")
+                logger.info(f" sys.path前5项: {sys.path[:5]}")
+                
+                # 确保模块路径正确
+                if hasattr(sys, '_MEIPASS'):
+                    # 添加打包环境的路径
+                    if sys._MEIPASS not in sys.path:
+                        sys.path.insert(0, sys._MEIPASS)
+                        logger.info(f" 已添加MEIPASS到sys.path: {sys._MEIPASS}")
+                    
+                    # 检查services目录是否存在
+                    services_path = os.path.join(sys._MEIPASS, 'services')
+                    crawler_path = os.path.join(sys._MEIPASS, 'services', 'crawler')
+                    main_path = os.path.join(sys._MEIPASS, 'services', 'crawler', 'main.py')
+                    logger.info(f" services目录存在: {os.path.exists(services_path)}")
+                    logger.info(f" crawler目录存在: {os.path.exists(crawler_path)}")
+                    logger.info(f" main.py文件存在: {os.path.exists(main_path)}")
+                    
+                    if os.path.exists(services_path):
+                        logger.info(f" services目录内容: {os.listdir(services_path)}")
+                    if os.path.exists(crawler_path):
+                        logger.info(f" crawler目录内容: {os.listdir(crawler_path)}")
+                
+                logger.info(" 尝试导入爬虫模块...")
+                # 直接导入并执行爬虫
+                from services.crawler.main import main as crawler_main
+                logger.info(" 爬虫模块导入成功")
+                
+                # 在新的asyncio事件循环中运行爬虫
+                import asyncio
+                
+                async def run_crawler_async():
+                    try:
+                        result = await crawler_main(target_date)
+                        # 解析爬虫返回的结果
+                        if isinstance(result, dict):
+                            if result.get('success', False):
+                                message = result.get('message', '爬虫执行完成')
+                                # 尝试从消息中提取数据条数
+                                new_count = 0
+                                if '新增' in message and '条' in message:
+                                    import re
+                                    match = re.search(r'新增\s*(\d+)\s*条', message)
+                                    if match:
+                                        new_count = int(match.group(1))
+                                        logger.info(f" 成功解析新增数据条数: {new_count}")
+                                    else:
+                                        logger.warning(f" 无法从消息中解析数据条数: {message}")
+                                elif '数据已是最新状态' in message or '无新记录' in message:
+                                    # 这种情况是成功的，但没有新数据
+                                    message = "数据已是最新"
+                                    new_count = 0
+                                return True, message, new_count
+                            else:
+                                # 爬虫执行失败的情况
+                                error_message = result.get('message', '爬虫执行失败')
+                                if '没有业务数据' in error_message or '没有数据' in error_message:
+                                    return False, "当前同步日期没有数据", 0
+                                else:
+                                    return False, error_message, 0
+                        else:
+                            return True, "爬虫执行完成", 0
+                    except Exception as e:
+                        error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
+                        logger.error(f"Crawler execution error: {error_msg}")
+                        return False, f"Crawler execution error: {error_msg}", 0
+                
+                # 直接在当前事件循环中运行爬虫
+                result = await run_crawler_async()
+                return result
+                    
+            except Exception as e:
+                error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
+                logger.error(f"Crawler module import or execution failed: {error_msg}")
+                return False, f"Crawler execution failed: {error_msg}", 0
+            
+            # 这里不需要设置cmd，因为我们直接在当前进程执行了
+            cmd = None
+        else:
+            # 开发环境：使用Python模块方式
+            cmd = [sys.executable, "-m", "services.crawler.main"]
+            if target_date:
+                cmd.extend(["--date", target_date])
+            logger.info(f" 执行爬虫命令: {' '.join(cmd)}")
+        
+        # 如果是打包环境且已经在当前进程执行了爬虫，直接返回结果
+        if getattr(sys, 'frozen', False) and cmd is None:
+            # 在打包环境中，爬虫已经在当前进程执行完成
+            return result
+        
+        logger.info(f"执行爬虫命令: {' '.join(cmd[:2])}...")
+        
+        # 设置环境变量
+        env = os.environ.copy()
+        env['KSX_DATABASE_DIR'] = main_db_dir
+        
+        # 运行爬虫程序
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env
+        )
+        
+        # 实时读取输出
+        stdout_lines = []
+        stderr_lines = []
+        
+        async def read_stdout():
+            while True:
+                line = await process.stdout.readline()
+                if not line:
+                    break
+                line_text = line.decode('utf-8', errors='ignore').strip()
+                if line_text:
+                    stdout_lines.append(line_text)
+                    logger.info(f"爬虫输出: {line_text}")
+                    # print(f"爬虫输出: {line_text}")
+        
+        async def read_stderr():
+            while True:
+                line = await process.stderr.readline()
+                if not line:
+                    break
+                line_text = line.decode('utf-8', errors='ignore').strip()
+                if line_text:
+                    stderr_lines.append(line_text)
+                    # 根据日志级别分类显示
+                    if "ERROR" in line_text:
+                        logger.error(f"爬虫错误: {line_text}")
+                        # print(f"爬虫错误: {line_text}")
+                    elif "WARNING" in line_text:
+                        logger.warning(f"爬虫警告: {line_text}")
+                        # print(f"爬虫警告: {line_text}")
+                    else:
+                        logger.info(f"爬虫信息: {line_text}")
+                        # print(f"爬虫信息: {line_text}")
+        
+        # 启动读取任务
+        stdout_task = asyncio.create_task(read_stdout())
+        stderr_task = asyncio.create_task(read_stderr())
+        
+        # 等待进程完成
+        return_code = await process.wait()
+        
+        # 等待读取任务完成
+        await stdout_task
+        await stderr_task
+        
+        stdout = '\n'.join(stdout_lines).encode('utf-8')
+        stderr = '\n'.join(stderr_lines).encode('utf-8')
+        
+        # 注意：在打包环境中，爬虫是在当前进程执行的，不会到达这里
+        
+        if return_code == 0:
+            output = stdout.decode('utf-8', errors='ignore')
+            logger.info("爬虫程序执行成功")
+            logger.info(f"输出: {output}")
+            
+            # 解析输出，获取最终数据条数和消息
+            new_count = 0
+            message = "数据同步完成"
+            
+            # 从输出中提取信息
+            if "没有业务数据" in output or "当前日期没有业务数据" in output:
+                message = "当前日期没有业务数据，请核查日期"
+                new_count = 0
+            elif "ERROR_TYPE: BROWSER_START_FAILED" in output:
+                message = "浏览器启动失败，请检查浏览器安装或权限设置"
+                new_count = 0
+            elif "ERROR_TYPE: LOGIN_FAILED" in output:
+                message = "登录失败，请检查用户名密码或网络连接"
+                new_count = 0
+            elif "ERROR_TYPE: DATA_EXTRACTION_FAILED" in output:
+                message = "数据提取失败，请检查网络连接或稍后重试"
+                new_count = 0
+            elif "ERROR_TYPE: USER_INTERRUPTED" in output:
+                message = "用户中断操作"
+                new_count = 0
+            elif "ERROR_TYPE: UNKNOWN_ERROR" in output:
+                message = "未知错误，请查看日志或联系管理员"
+                new_count = 0
+            elif "共获取" in output:
+                # 尝试从输出中提取数据条数
+                import re
+                match = re.search(r'共获取\s*(\d+)\s*条', output)
+                if match:
+                    new_count = int(match.group(1))
+            elif "数据库记录" in output:
+                # 尝试从输出中提取数据库记录数
+                import re
+                match = re.search(r'数据库记录:\s*(\d+)条', output)
+                if match:
+                    new_count = int(match.group(1))
+            
+            return True, message, new_count
+        else:
+            stdout_text = stdout.decode('utf-8', errors='ignore')
+            stderr_text = stderr.decode('utf-8', errors='ignore')
+            
+            logger.error(f"爬虫程序执行失败，返回码: {return_code}")
+            logger.error(f"标准输出: {stdout_text}")
+            logger.error(f"标准错误: {stderr_text}")
+            
+            # 组合错误信息
+            error_msg = f"返回码: {return_code}"
+            if stdout_text:
+                error_msg += f"\n输出: {stdout_text}"
+            if stderr_text:
+                error_msg += f"\n错误: {stderr_text}"
+            
+            return False, f"爬虫执行失败: {error_msg}", 0
+        
+    except Exception as e:
+        error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
+        logger.error(f"Internal crawler execution failed: {error_msg}")
+        return False, f"Internal crawler execution failed: {error_msg}", 0
+
+
+async def run_crawler_external(target_date: str = None, project_root: str = None):
+    """在开发环境中使用外部进程运行爬虫"""
+    try:
         # 构建爬虫命令
         crawler_script = os.path.join(project_root, "services", "crawler", "main.py")
-        
-        # 在打包环境中直接使用Python，开发环境使用uv
-        if getattr(sys, 'frozen', False):
-            # 打包环境：使用系统Python
-            import shutil
-            python_path = shutil.which('python3') or shutil.which('python')
-            if python_path:
-                cmd = [python_path, crawler_script]
-            else:
-                # 如果找不到Python，尝试使用uv
-                cmd = ["uv", "run", "python", crawler_script]
-        else:
-            # 开发环境：使用uv
-            cmd = ["uv", "run", "python", crawler_script]
+        cmd = ["uv", "run", "python", crawler_script]
         
         # 如果指定了日期，添加日期参数
         if target_date:
@@ -76,10 +306,55 @@ async def run_crawler(target_date: str = None):
             env=env
         )
         
-        # 等待进程完成
-        stdout, stderr = await process.communicate()
+        # 实时读取输出
+        stdout_lines = []
+        stderr_lines = []
         
-        if process.returncode == 0:
+        async def read_stdout():
+            while True:
+                line = await process.stdout.readline()
+                if not line:
+                    break
+                line_text = line.decode('utf-8', errors='ignore').strip()
+                if line_text:
+                    stdout_lines.append(line_text)
+                    logger.info(f"爬虫输出: {line_text}")
+                    # print(f"爬虫输出: {line_text}")
+        
+        async def read_stderr():
+            while True:
+                line = await process.stderr.readline()
+                if not line:
+                    break
+                line_text = line.decode('utf-8', errors='ignore').strip()
+                if line_text:
+                    stderr_lines.append(line_text)
+                    # 根据日志级别分类显示
+                    if "ERROR" in line_text or "" in line_text:
+                        logger.error(f"爬虫错误: {line_text}")
+                        # print(f"爬虫错误: {line_text}")
+                    elif "WARNING" in line_text or "" in line_text:
+                        logger.warning(f"爬虫警告: {line_text}")
+                        # print(f"爬虫警告: {line_text}")
+                    else:
+                        logger.info(f"爬虫信息: {line_text}")
+                        # print(f"爬虫信息: {line_text}")
+        
+        # 启动读取任务
+        stdout_task = asyncio.create_task(read_stdout())
+        stderr_task = asyncio.create_task(read_stderr())
+        
+        # 等待进程完成
+        return_code = await process.wait()
+        
+        # 等待读取任务完成
+        await stdout_task
+        await stderr_task
+        
+        stdout = '\n'.join(stdout_lines).encode('utf-8')
+        stderr = '\n'.join(stderr_lines).encode('utf-8')
+        
+        if return_code == 0:
             output = stdout.decode('utf-8', errors='ignore')
             logger.info("爬虫程序执行成功")
             logger.info(f"输出: {output}")
@@ -127,8 +402,33 @@ async def run_crawler(target_date: str = None):
             return False, f"爬虫执行失败: {error_msg}", 0
             
     except Exception as e:
-        logger.error(f"运行爬虫程序异常: {e}")
-        return False, f"运行爬虫程序异常: {str(e)}", 0
+        error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
+        logger.error(f"Crawler execution exception: {error_msg}")
+        return False, f"Crawler execution exception: {error_msg}", 0
+
+
+async def run_crawler(target_date: str = None):
+    """运行爬虫程序"""
+    try:
+        if target_date:
+            logger.info(f"开始运行爬虫程序，目标日期: {target_date}")
+        else:
+            logger.info("开始运行爬虫程序，使用默认日期")
+        
+        # 根据环境选择不同的执行方式
+        if getattr(sys, 'frozen', False):
+            # 打包环境：直接调用爬虫模块，不依赖外部Python
+            logger.info("打包环境：使用内置爬虫模块")
+            return await run_crawler_internal(target_date)
+        else:
+            # 开发环境：使用外部进程
+            logger.info("开发环境：使用外部进程")
+            return await run_crawler_external(target_date, project_root)
+            
+    except Exception as e:
+        error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
+        logger.error(f"Crawler execution failed: {error_msg}")
+        return False, f"Crawler execution failed: {error_msg}", 0
 
 
 @router.post("/sync-data", response_model=SyncResponse)
@@ -149,24 +449,23 @@ async def sync_data(request: SyncRequest, background_tasks: BackgroundTasks):
         success, message, new_count = await run_crawler(target_date)
         
         if success:
-            logger.info(f"数据同步完成，共 {new_count or 0} 条数据")
             return SyncResponse(
                 success=True,
                 message=message,
-                total=new_count
+                total=new_count  # 使用total字段而不是new_count
             )
         else:
-            logger.error(f"数据同步失败: {message}")
             return SyncResponse(
                 success=False,
                 message=message,
-                error_code="CRAWLER_ERROR"
+                total=0
             )
-        
+            
     except Exception as e:
-        logger.error(f"同步数据接口异常: {e}")
+        error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
+        logger.error(f"Data sync failed: {error_msg}")
         return SyncResponse(
             success=False,
-            message=f"同步数据失败: {str(e)}",
-            error_code="INTERNAL_ERROR"
+            message=f"数据同步失败: {str(e)}",
+            total=0
         )

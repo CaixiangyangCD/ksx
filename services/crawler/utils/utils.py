@@ -31,7 +31,7 @@ class FileUtils:
                 json.dump(data, f, ensure_ascii=ensure_ascii, indent=2)
             return True
         except Exception as e:
-            print(f"保存JSON文件失败: {e}")
+            # print(f"保存JSON文件失败: {e}")
             return False
     
     @staticmethod
@@ -43,7 +43,7 @@ class FileUtils:
                     return json.load(f)
             return None
         except Exception as e:
-            print(f"加载JSON文件失败: {e}")
+            # print(f"加载JSON文件失败: {e}")
             return None
     
     @staticmethod
@@ -65,7 +65,7 @@ class FileUtils:
             
             return True
         except Exception as e:
-            print(f"保存CSV文件失败: {e}")
+            # print(f"保存CSV文件失败: {e}")
             return False
     
     @staticmethod
@@ -77,7 +77,7 @@ class FileUtils:
                 f.write(content)
             return True
         except Exception as e:
-            print(f"保存文本文件失败: {e}")
+            # print(f"保存文本文件失败: {e}")
             return False
 
 
@@ -191,30 +191,31 @@ class LogUtils:
             with open(log_file, 'a', encoding='utf-8') as f:
                 f.write(log_entry)
         except Exception as e:
-            print(f"写入日志失败: {e}")
+            # print(f"写入日志失败: {e}")
+            pass
     
     @staticmethod
     def log_success(message: str):
         """记录成功日志"""
-        print(f"✅ {message}")
+        # print(f"✅ {message}")
         LogUtils.log_to_file(f"SUCCESS: {message}")
     
     @staticmethod
     def log_error(message: str):
         """记录错误日志"""
-        print(f"❌ {message}")
+        # print(f"❌ {message}")
         LogUtils.log_to_file(f"ERROR: {message}")
     
     @staticmethod
     def log_info(message: str):
         """记录信息日志"""
-        print(f"ℹ️ {message}")
+        # print(f"ℹ️ {message}")
         LogUtils.log_to_file(f"INFO: {message}")
     
     @staticmethod
     def log_warning(message: str):
         """记录警告日志"""
-        print(f"⚠️ {message}")
+        # print(f"⚠️ {message}")
         LogUtils.log_to_file(f"WARNING: {message}")
 
 

@@ -11,20 +11,25 @@ import os
 import sys
 import argparse
 from datetime import datetime
-from crawler import KSXCrawler
+from .crawler import KSXCrawler
 
 
 async def main(target_date: str = None):
     """主函数 - 执行基于API的数据提取"""
     if target_date:
-        print(f"🚀 开始基于API的KSX数据提取，目标日期: {target_date}")
+        logging.info(f"开始基于API的KSX数据提取，目标日期: {target_date}")
     else:
-        print("🚀 开始基于API的KSX数据提取...")
+        logging.info("开始基于API的KSX数据提取...")
     
     # 创建爬虫实例（使用配置文件中的设置）
-    from config import get_config
-    config = get_config()
-    crawler = KSXCrawler(headless=config['browser']['headless'], timeout=30000)
+    try:
+        from config import get_config
+        config = get_config()
+        crawler = KSXCrawler(headless=config['browser']['headless'], timeout=30000)
+    except ImportError as e:
+        logging.error(f"配置导入失败，使用默认设置: {e}")
+        # 如果配置导入失败，使用默认设置
+        crawler = KSXCrawler(headless=True, timeout=30000)  # 默认使用无头模式
     
     # 如果指定了日期，设置爬虫的目标日期
     if target_date:
@@ -32,50 +37,62 @@ async def main(target_date: str = None):
     
     try:
         # 启动浏览器
-        print("📱 正在启动浏览器...")
+        logging.info(" 正在启动浏览器...")
         browser_success = await crawler.start_browser()
         if not browser_success:
-            print("❌ 浏览器启动失败")
-            print("ERROR_TYPE: BROWSER_START_FAILED")
-            return
+            logging.error(" 浏览器启动失败")
+            logging.error("ERROR_TYPE: BROWSER_START_FAILED")
+            return {"success": False, "message": "浏览器启动失败"}
         
-        print("✅ 浏览器启动成功")
+        logging.info(" 浏览器启动成功")
         
         # 执行登录
-        print("🔐 正在登录...")
+        logging.info(" 正在登录...")
         login_success = await crawler.login()
         if not login_success:
-            print("❌ 登录失败")
-            print("ERROR_TYPE: LOGIN_FAILED")
-            return
+            logging.error(" 登录失败")
+            logging.error("ERROR_TYPE: LOGIN_FAILED")
+            return {"success": False, "message": "登录失败"}
         
-        print("✅ 登录成功")
+        logging.info(" 登录成功")
         
         # 执行完整的API数据提取流程
-        print("📊 开始API数据提取...")
-        extraction_success = await crawler.full_api_data_extraction()
+        logging.info(" 开始API数据提取...")
+        extraction_result = await crawler.full_api_data_extraction()
         
-        if extraction_success:
-            print("🎉 API数据提取完成！")
+        if extraction_result.get('success', False):
+            message = extraction_result.get('message', '数据提取完成')
+            logging.info(f" {message}")
+            # 返回完整的结果，以便后端能够正确解析
+            return extraction_result
         else:
-            print("❌ API数据提取失败")
-            print("ERROR_TYPE: DATA_EXTRACTION_FAILED")
+            error_msg = extraction_result.get('message', '数据提取失败')
+            if '没有业务数据' in error_msg or '没有数据' in error_msg:
+                logging.info(f" {error_msg}")
+                logging.info("INFO_TYPE: NO_DATA_FOR_DATE")
+            else:
+                logging.error(f" {error_msg}")
+                logging.error("ERROR_TYPE: DATA_EXTRACTION_FAILED")
+            # 返回失败结果
+            return extraction_result
         
         # 自动关闭，无需用户确认
-        print("🔄 程序执行完成，正在自动关闭...")
+        logging.info(" 程序执行完成，正在自动关闭...")
         
     except KeyboardInterrupt:
-        print("\n⚠️ 用户中断操作")
-        print("ERROR_TYPE: USER_INTERRUPTED")
+        logging.error("\n 用户中断操作")
+        logging.error("ERROR_TYPE: USER_INTERRUPTED")
+        return {"success": False, "message": "用户中断操作"}
     except Exception as e:
-        print(f"❌ 程序异常: {e}")
-        print("ERROR_TYPE: UNKNOWN_ERROR")
+        logging.error(f" 程序异常: {e}")
+        logging.error("ERROR_TYPE: UNKNOWN_ERROR")
         logging.error(f"程序异常: {e}", exc_info=True)
+        return {"success": False, "message": f"程序异常: {str(e)}"}
     finally:
         # 清理资源
-        print("🔄 正在清理资源...")
+        logging.info(" 正在清理资源...")
         await crawler.close()
-        print("✅ 资源清理完成")
+        logging.info(" 资源清理完成")
 
 
 if __name__ == "__main__":

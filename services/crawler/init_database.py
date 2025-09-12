@@ -268,10 +268,10 @@ async def save_to_database(data: list) -> int:
 async def init_database():
     """初始化数据库数据"""
     try:
-        logger.info("🚀 开始初始化数据库数据...")
+        logger.info(" 开始初始化数据库数据...")
         
         # 生成模拟数据
-        logger.info("📝 生成模拟爬取数据...")
+        logger.info(" 生成模拟爬取数据...")
         mock_data = await generate_mock_data()
         logger.info(f"✅ 生成 {len(mock_data)} 条模拟数据")
         
@@ -282,15 +282,15 @@ async def init_database():
         db_result = await save_to_database(unique_data)
         
         if db_result > 0:
-            logger.info(f"🎉 数据库初始化完成！成功保存 {db_result} 条记录")
+            logger.info(f" 数据库初始化完成！成功保存 {db_result} 条记录")
             
             # 验证数据
             db_manager = get_db_manager()
             result = db_manager.query_data(page=1, page_size=5)
-            logger.info(f"📊 验证数据: 数据库中共有 {result['total']} 条记录")
+            logger.info(f" 验证数据: 数据库中共有 {result['total']} 条记录")
             
             if result['data']:
-                logger.info("📄 样例数据:")
+                logger.info(" 样例数据:")
                 for i, item in enumerate(result['data'][:3]):
                     logger.info(f"   {i+1}. {item.get('MDShow', 'N/A')} - 得分: {item.get('totalScore', 'N/A')}")
             

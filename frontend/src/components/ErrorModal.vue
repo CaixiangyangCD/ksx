@@ -73,7 +73,7 @@ const handleClose = () => {
 const getErrorIcon = () => {
   if (!props.syncResult) return '⚠️'
   const message = props.syncResult.message || ''
-  if (message.includes('没有业务数据')) return '📅'
+  if (message.includes('没有数据')) return '📅'
   if (message.includes('登录失败') || message.includes('用户名') || message.includes('密码')) return '🔐'
   if (message.includes('超时') || message.includes('网络')) return '🌐'
   if (message.includes('浏览器') || message.includes('启动失败')) return '🌍'
@@ -84,7 +84,7 @@ const getErrorIcon = () => {
 const getErrorTitle = () => {
   if (!props.syncResult) return '同步失败'
   const message = props.syncResult.message || ''
-  if (message.includes('没有业务数据')) {
+  if (message.includes('没有数据')) {
     // 从消息中提取日期信息，或者使用默认的昨天日期
     let targetDateStr = '昨天'
     
@@ -109,7 +109,7 @@ const getErrorTitle = () => {
       })
     }
     
-    return `没有业务数据 (${targetDateStr})`
+    return `没有数据 (${targetDateStr})`
   }
   if (message.includes('登录失败') || message.includes('用户名') || message.includes('密码')) return '登录失败'
   if (message.includes('超时') || message.includes('网络')) return '网络超时'
@@ -126,7 +126,7 @@ const getErrorReasons = () => {
   if (!props.syncResult) return []
   const message = props.syncResult.message || ''
   
-  if (message.includes('没有业务数据')) {
+  if (message.includes('没有数据')) {
     // 从消息中提取日期信息，或者使用默认的昨天日期
     let targetDateStr = '昨天'
     
@@ -197,7 +197,7 @@ const getErrorActions = () => {
   if (!props.syncResult) return []
   const message = props.syncResult.message || ''
   
-  if (message.includes('没有业务数据')) {
+  if (message.includes('没有数据')) {
     return [
       '检查日期设置',
       '联系管理员确认数据状态',
