@@ -6,6 +6,7 @@
     centered
     @cancel="handleCancel"
     class="store-config-modal-fullscreen"
+    :mask-closable="false"
   >
     <template #title>
       <div class="modal-title">

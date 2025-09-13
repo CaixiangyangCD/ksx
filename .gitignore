@@ -97,3 +97,11 @@ data/**
 # Backup files
 *.backup
 *.bak
+
+# Import and export folders
+import/
+import/**
+export/
+export/**
+backend/exports/
+backend/exports/**

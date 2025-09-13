@@ -257,7 +257,7 @@ async def save_to_database(data: list) -> int:
         logger.info(f"✅ 成功保存 {inserted_count} 条记录到数据库（日期: {yesterday.strftime('%Y-%m-%d')}）")
         
         # 清理旧数据库（保留近1个月）
-        db_manager.cleanup_old_databases(keep_months=1)
+        # db_manager.cleanup_old_databases(keep_months=1)
         
         return inserted_count
         

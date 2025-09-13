@@ -6,6 +6,7 @@
     centered
     @cancel="handleCancel"
     class="field-config-modal-fullscreen"
+    :mask-closable="false"
   >
     <template #title>
       <div class="modal-title">
@@ -275,7 +276,7 @@ const handleSave = async () => {
       Modal.confirm({
         title: '配置变更确认',
         icon: h(ExclamationCircleOutlined),
-        content: '您已修改字段配置，本次导出的Excel将会创建新文件，不会覆盖现有文件。是否确认保存？',
+        content: '您已修改字段配置，Excel读取和导出将使用新的字段配置。是否确认保存？',
         okText: '确认保存',
         cancelText: '取消',
         onOk: () => resolve(true),

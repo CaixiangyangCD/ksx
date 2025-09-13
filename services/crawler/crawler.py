@@ -1398,7 +1398,7 @@ class KSXCrawler:
             # 清理旧数据库
             from services.database_manager import DatabaseManager
             db_manager = DatabaseManager()
-            db_manager.cleanup_old_databases()
+            # db_manager.cleanup_old_databases()
             
             return {
                 "success": True,
@@ -1475,8 +1475,7 @@ class KSXCrawler:
                         "error": str(e)
                     }
             
-            # 清理旧数据库（保留近1个月）
-            db_manager.cleanup_old_databases(keep_months=1)
+            # 不再自动清理旧数据库，保留所有历史数据
             
             result = {
                 "total_records": total_saved,
@@ -1633,7 +1632,7 @@ class KSXCrawler:
             # print(f" 成功保存 {inserted_count} 条记录到数据库（日期: {yesterday.strftime('%Y-%m-%d')}）")
             
             # 清理旧数据库（保留近1个月）
-            db_manager.cleanup_old_databases(keep_months=1)
+            # db_manager.cleanup_old_databases(keep_months=1)
             
             return inserted_count
             

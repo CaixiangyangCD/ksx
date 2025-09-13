@@ -28,6 +28,9 @@ sys.path.append(project_root)
 from services.database_manager import get_db_manager
 from services.config_database_manager import config_db_manager
 
+# 导入API路由
+from backend.api import import_api
+
 # 创建FastAPI应用
 app = FastAPI(
     title="KSX数据查询API",
@@ -43,6 +46,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 注册API路由
+app.include_router(import_api.router, prefix="/api/import", tags=["import"])
 
 # 配置日志
 logger.remove()

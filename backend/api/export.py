@@ -7,6 +7,7 @@
 from fastapi import APIRouter, HTTPException
 import sys
 import os
+from typing import Dict, List, Any
 from loguru import logger
 from datetime import datetime
 import re
@@ -53,75 +54,8 @@ from backend.utils.excel_export import create_incremental_excel
 
 router = APIRouter(prefix="/api", tags=["export"])
 
-# 字段配置和中文名称映射
-FIELD_CONFIG = {
-    "area": {"name": "区域", "comment": "门店所属区域"},
-    "createDateShow": {"name": "创建日期", "comment": "数据创建日期"},
-    "MDShow": {"name": "门店名称", "comment": "门店显示名称"},
-    "totalScore": {"name": "总分", "comment": "门店综合评分"},
-    "monthlyCanceledRate": {"name": "月度取消率", "comment": "月度订单取消率"},
-    "dailyCanceledRate": {"name": "日取消率", "comment": "日订单取消率"},
-    "monthlyMerchantRefundRate": {"name": "月度商家退款率", "comment": "月度商家责任退款率"},
-    "monthlyOosRefundRate": {"name": "月度缺货退款率", "comment": "月度缺货退款率"},
-    "monthlyJdOosRate": {"name": "月度京东缺货率", "comment": "月度京东缺货率"},
-    "monthlyBadReviews": {"name": "月度差评数", "comment": "月度差评数量"},
-    "monthlyBadReviewRate": {"name": "月度差评率", "comment": "月度差评率"},
-    "monthlyPartialRefundRate": {"name": "月度部分退款率", "comment": "月度部分退款率"},
-    "dailyMeituanRating": {"name": "美团评分", "comment": "美团平台日评分"},
-    "dailyElemeRating": {"name": "饿了么评分", "comment": "饿了么平台日评分"},
-    "dailyMeituanReplyRate": {"name": "美团回复率", "comment": "美团平台回复率"},
-    "effectReply": {"name": "有效回复", "comment": "有效回复状态"},
-    "monthlyMeituanPunctualityRate": {"name": "美团准时率", "comment": "美团月度准时送达率"},
-    "monthlyElemeOntimeRate": {"name": "饿了么准时率", "comment": "饿了么月度准时送达率"},
-    "monthlyJdFulfillmentRate": {"name": "京东履约率", "comment": "京东月度履约率"},
-    "meituanComprehensiveExperienceDivision": {"name": "美团综合体验分", "comment": "美团综合体验评分"},
-    "monthlyAvgStockRate": {"name": "月度平均库存率", "comment": "月度平均库存率"},
-    "monthlyAvgTop500StockRate": {"name": "月度TOP500库存率", "comment": "月度TOP500商品库存率"},
-    "monthlyAvgDirectStockRate": {"name": "月度直营库存率", "comment": "月度直营商品库存率"},
-    "dailyTop500StockRate": {"name": "日TOP500库存率", "comment": "日TOP500商品库存率"},
-    "dailyWarehouseSoldOut": {"name": "日仓库售罄数", "comment": "日仓库售罄商品数"},
-    "dailyWarehouseStockRate": {"name": "日仓库库存率", "comment": "日仓库库存率"},
-    "dailyDirectSoldOut": {"name": "日直营售罄数", "comment": "日直营售罄商品数"},
-    "dailyDirectStockRate": {"name": "日直营库存率", "comment": "日直营库存率"},
-    "dailyHybridSoldOut": {"name": "日混合售罄数", "comment": "日混合售罄商品数"},
-    "dailyStockAvailability": {"name": "日库存可用率", "comment": "日库存可用率"},
-    "dailyHybridStockRate": {"name": "日混合库存率", "comment": "日混合库存率"},
-    "stockNoLocation": {"name": "无位置库存数", "comment": "无位置库存商品数"},
-    "expiryManagement": {"name": "保质期管理", "comment": "保质期管理状态"},
-    "inventoryLockOrders": {"name": "库存锁定订单", "comment": "库存锁定订单数"},
-    "trainingCompleted": {"name": "培训完成", "comment": "培训完成状态"},
-    "monthlyManhourPer100Orders": {"name": "月度百单工时", "comment": "月度每百单工时"},
-    "monthlyTotalLoss": {"name": "月度总损失", "comment": "月度总损失金额"},
-    "monthlyTotalLossRate": {"name": "月度总损失率", "comment": "月度总损失率"},
-    "monthlyAvgDeliveryFee": {"name": "月度平均配送费", "comment": "月度平均配送费"},
-    "dailyAvgDeliveryFee": {"name": "日平均配送费", "comment": "日平均配送费"},
-    "monthlyCumulativeCancelRateScore": {"name": "月度累计取消率得分", "comment": "月度累计取消率得分"},
-    "monthlyMerchantLiabilityRefundRateScore": {"name": "月度商家责任退款率得分", "comment": "月度商家责任退款率得分"},
-    "monthlyStockoutRefundRateScore": {"name": "月度缺货退款率得分", "comment": "月度缺货退款率得分"},
-    "monthlyNegativeReviewRateScore": {"name": "月度差评率得分", "comment": "月度差评率得分"},
-    "monthlyPartialRefundRateScore": {"name": "月度部分退款率得分", "comment": "月度部分退款率得分"},
-    "dailyMeituanRatingScore": {"name": "美团评分得分", "comment": "美团评分得分"},
-    "dailyElemeRatingScore": {"name": "饿了么评分得分", "comment": "饿了么评分得分"},
-    "monthlyMeituanDeliveryPunctualityRateScore": {"name": "美团配送准时率得分", "comment": "美团配送准时率得分"},
-    "monthlyElemeTimelyDeliveryRateScore": {"name": "饿了么及时配送率得分", "comment": "饿了么及时配送率得分"},
-    "validReplyWeightingPenalty": {"name": "有效回复权重惩罚", "comment": "有效回复权重惩罚"},
-    "monthlyAverageStockRateWeightingPenalty": {"name": "月度平均库存率权重惩罚", "comment": "月度平均库存率权重惩罚"},
-    "monthlyAverageTop500StockRateWeightingPenalty": {"name": "月度TOP500库存率权重惩罚", "comment": "月度TOP500库存率权重惩罚"},
-    "monthlyAverageDirectStockRateWeightingPenalty": {"name": "月度直营库存率权重惩罚", "comment": "月度直营库存率权重惩罚"},
-    "newProductComplianceListingWeightingPenalty": {"name": "新品合规上架权重惩罚", "comment": "新品合规上架权重惩罚"},
-    "expiryManagementWeightingPenalty": {"name": "保质期管理权重惩罚", "comment": "保质期管理权重惩罚"},
-    "inventoryLockWeightingPenalty": {"name": "库存锁定权重惩罚", "comment": "库存锁定权重惩罚"},
-    "monthlyCumulativeHundredOrdersManhourWeightingPenalty": {"name": "月度累计百单工时权重惩罚", "comment": "月度累计百单工时权重惩罚"},
-    "totalScoreWithoutWeightingPenalty": {"name": "无权重惩罚总分", "comment": "无权重惩罚总分"},
-    "monthlyCumulativeMerchantLiabilityRefundRateWeightingPenalty": {"name": "月度累计商家责任退款率权重惩罚", "comment": "月度累计商家责任退款率权重惩罚"},
-    "monthlyCumulativeOutOfStockRefundRateWeightingPenalty": {"name": "月度累计缺货退款率权重惩罚", "comment": "月度累计缺货退款率权重惩罚"},
-    "meituanComplexExperienceScoreWeightingPenalty": {"name": "美团综合体验分权重惩罚", "comment": "美团综合体验分权重惩罚"},
-    "meituanRatingWeightingPenalty": {"name": "美团评分权重惩罚", "comment": "美团评分权重惩罚"},
-    "elemeRatingWeightingPenalty": {"name": "饿了么评分权重惩罚", "comment": "饿了么评分权重惩罚"},
-    "partialRefundWeightingPenalty": {"name": "部分退款权重惩罚", "comment": "部分退款权重惩罚"},
-    "trainingCompletedWeightingPenalty": {"name": "培训完成权重惩罚", "comment": "培训完成权重惩罚"},
-    "totalWeightingPenalty": {"name": "总权重惩罚", "comment": "总权重惩罚"}
-}
+# 导入字段配置常量
+from backend.constants.field_config import FIELD_CONFIG, get_field_display_name, get_field_comment, get_all_field_keys
 
 
 @router.post("/export-data")
@@ -464,4 +398,55 @@ async def save_export_field_rule(field_rule: dict = {}):
         return {
             "success": False,
             "message": f"保存字段导出规则失败: {str(e)}"
+        }
+
+
+@router.get("/field-config")
+async def get_field_config():
+    """获取字段配置信息"""
+    try:
+        return {
+            "success": True,
+            "message": "获取字段配置成功",
+            "field_config": FIELD_CONFIG,
+            "all_fields": get_all_field_keys()
+        }
+    except Exception as e:
+        logger.error(f"获取字段配置失败: {e}")
+        return {
+            "success": False,
+            "message": f"获取字段配置失败: {str(e)}"
+        }
+
+
+@router.post("/field-config/validate")
+async def validate_field_config(request: Dict[str, List[str]]):
+    """验证字段配置"""
+    try:
+        selected_fields = request.get("selected_fields", [])
+        
+        # 验证字段是否存在于配置中
+        invalid_fields = []
+        for field in selected_fields:
+            if field not in FIELD_CONFIG:
+                invalid_fields.append(field)
+        
+        if invalid_fields:
+            return {
+                "success": False,
+                "message": f"以下字段不存在于配置中: {', '.join(invalid_fields)}",
+                "invalid_fields": invalid_fields
+            }
+        
+        return {
+            "success": True,
+            "message": f"字段配置验证通过，共 {len(selected_fields)} 个字段",
+            "valid_fields": selected_fields
+        }
+        
+    except Exception as e:
+        logger.error(f"验证字段配置失败: {e}")
+        return {
+            "success": False,
+            "message": f"验证字段配置失败: {str(e)}"
         }

@@ -6,6 +6,7 @@
     :footer="null"
     centered
     @cancel="handleCancel"
+    :mask-closable="false"
   >
     <div class="excel-export-modal">
       <div class="config-section">

@@ -20,6 +20,7 @@
             @batchSync="showBatchSyncModalHandler"
             @config="showStoreConfig"
             @fieldConfig="showFieldConfig"
+            @selectExcel="showExcelFileSelector = true"
             @export="exportData"
             @exportExcel="showExcelExport"
           />
@@ -205,6 +206,51 @@
         :current-query-date="currentQueryDate"
         @export="handleExcelExport"
       />
+
+      <!-- Excel文件选择器 -->
+      <ExcelFileSelector
+        v-model:open="showExcelFileSelector"
+        @select="handleExcelFileSelect"
+        @cancel="showExcelFileSelector = false"
+      />
+
+      <!-- 月份选择器 -->
+      <MonthSelector
+        :visible="showMonthSelector"
+        :excel-filename="selectedExcelFile?.name"
+        :detected-month="detectedMonth"
+        @update:visible="(value) => showMonthSelector = value"
+        @confirm="handleMonthConfirm"
+      />
+
+      <!-- 读取模式选择器 - 暂时注释掉，避免误导用户 -->
+      <!-- <ReadingModeSelector
+        v-model:visible="showReadingModeSelector"
+        :excel-filename="selectedExcelFile?.name"
+        @confirm="handleReadingModeConfirm"
+      /> -->
+
+      <!-- Excel数据预览 -->
+      <ExcelDataPreview
+        v-model:open="showExcelDataPreview"
+        :file-info="selectedExcelFile"
+        :stores="excelStores"
+        :summary="excelSummary"
+        :store-data="excelStoreData"
+        :loading="excelDataLoading"
+        :selected-month="detectedMonth"
+        @confirm="handleExcelDataConfirm"
+        @cancel="showExcelDataPreview = false"
+        @view-details="handleViewStoreDetails"
+      />
+
+      <!-- 门店指标详情 -->
+      <StoreMetricsDetail
+        v-model:open="showStoreMetricsDetail"
+        :store-name="selectedStoreDetail?.storeName || ''"
+        :store-data="selectedStoreDetail?.storeData || {}"
+        :file-info="selectedStoreDetail?.fileInfo || {}"
+      />
     </div>
   </a-config-provider>
 </template>
@@ -223,6 +269,11 @@ import ErrorModal from "./components/ErrorModal.vue";
 import StoreConfigModal from "./components/StoreConfigModal.vue";
 import FieldConfigModal from "./components/FieldConfigModal.vue";
 import ExcelExportModal from "./components/ExcelExportModal.vue";
+import ExcelFileSelector from "./components/ExcelFileSelector.vue";
+import MonthSelector from "./components/MonthSelector.vue";
+import ReadingModeSelector from "./components/ReadingModeSelector.vue";
+import ExcelDataPreview from "./components/ExcelDataPreview.vue";
+import StoreMetricsDetail from "./components/StoreMetricsDetail.vue";
 import type { DataItem } from "./types";
 
 // API配置
@@ -260,6 +311,24 @@ const currentFieldRule = ref<any>(null);
 
 // Excel导出相关
 const showExcelExportModal = ref(false);
+
+// Excel文件选择相关
+const showExcelFileSelector = ref(false);
+const showMonthSelector = ref(false);
+const showReadingModeSelector = ref(false);
+const selectedExcelFile = ref<any>(null);
+const detectedMonth = ref<string>('');
+
+// Excel数据预览相关
+const showExcelDataPreview = ref(false);
+const excelStores = ref<any[]>([]);
+const excelSummary = ref<any>({});
+const excelStoreData = ref<Record<string, any>>({});
+const excelDataLoading = ref(false);
+
+// 门店详情Modal相关
+const showStoreMetricsDetail = ref(false);
+const selectedStoreDetail = ref<any>(null);
 
 // 搜索表单
 const searchForm = reactive({
@@ -513,6 +582,128 @@ const executeBatchSync = async (startDate: string, endDate: string | null) => {
   }
 };
 
+// Excel文件选择相关方法
+const handleExcelFileSelect = async (file: any) => {
+  selectedExcelFile.value = file;
+  
+  // 先提取月份信息
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/import/extract-month-from-filename`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ filename: file.name })
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      detectedMonth.value = result.detected_month || '';
+      console.log('App: extracted month from filename:', result.detected_month, 'for file:', file.name);
+    }
+  } catch (error) {
+    console.error('提取月份信息失败:', error);
+    detectedMonth.value = '';
+  }
+  
+  // 关闭文件选择器，显示月份选择器
+  showExcelFileSelector.value = false;
+  showMonthSelector.value = true;
+};
+
+// 处理月份确认
+const handleMonthConfirm = async (month: string) => {
+  detectedMonth.value = month;
+  showMonthSelector.value = false;
+  // 直接跳转到Excel数据预览，跳过读取模式选择
+  showExcelDataPreview.value = true;
+  excelDataLoading.value = true;
+  
+  // 开始读取Excel数据（使用全量读取模式）
+  await readExcelContent(selectedExcelFile.value, "full", month);
+};
+
+// 处理读取模式确认
+const handleReadingModeConfirm = async (config: { mode: string }) => {
+  showReadingModeSelector.value = false;
+  
+  // 立即显示数据预览Modal并设置loading状态
+  showExcelDataPreview.value = true;
+  excelDataLoading.value = true;
+  
+  // 读取Excel文件内容
+  await readExcelContent(selectedExcelFile.value, config.mode, detectedMonth.value);
+};
+
+// 读取Excel文件内容
+const readExcelContent = async (file: any, readingMode: string = "full", targetMonth?: string) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/import/read-excel-content`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        file_path: file.path,
+        reading_mode: readingMode,
+        target_month: targetMonth
+      })
+    });
+    
+    const result = await response.json();
+    if (result.success) {
+      // 保存Excel数据
+      excelStores.value = result.stores || [];
+      excelSummary.value = result.summary || {};
+      excelStoreData.value = result.data || {};
+      
+      message.success(`成功读取Excel内容，发现 ${result.stores.length} 个门店的数据`);
+    } else {
+      message.error(`读取Excel内容失败: ${result.message}`);
+      showExcelDataPreview.value = false;
+    }
+  } catch (error) {
+    console.error('读取Excel内容失败:', error);
+    message.error('读取Excel内容失败');
+    showExcelDataPreview.value = false;
+  } finally {
+    excelDataLoading.value = false;
+  }
+};
+
+// 确认Excel数据导入
+const handleExcelDataConfirm = async (data: any) => {
+  try {
+    console.log('Excel数据确认:', data);
+    
+    // 显示导入结果
+    const storeCount = data.stores.length;
+    const totalMetrics = Object.values(data.store_data).reduce((total: number, storeMetrics: any) => {
+      return total + Object.keys(storeMetrics).length;
+    }, 0);
+    
+    message.success({
+      content: `Excel数据导入成功！\n门店数量: ${storeCount} 个\n指标总数: ${totalMetrics} 个\n数据天数: ${data.stores[0]?.total_days || 0} 天`,
+      duration: 5
+    });
+    
+    showExcelDataPreview.value = false;
+    
+    // 这里可以添加数据导入到数据库的逻辑
+    // await importExcelDataToDatabase(data);
+    
+  } catch (error) {
+    console.error('导入Excel数据失败:', error);
+    message.error('导入Excel数据失败');
+  }
+};
+
+// 查看门店详情
+const handleViewStoreDetails = (data: any) => {
+  selectedStoreDetail.value = data;
+  showStoreMetricsDetail.value = true;
+};
+
 // 门店配置相关方法
 const loadStores = async () => {
   try {
@@ -657,12 +848,12 @@ const exportData = async () => {
 // Excel导出相关方法
 const loadFieldConfig = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/export-fields`);
+    const response = await fetch(`${API_BASE_URL}/api/field-config`);
     const result = await response.json();
     if (result.success) {
-      fieldConfig.value = result.data;
+      fieldConfig.value = result.field_config;
     } else {
-      message.error("获取字段配置失败");
+      message.error("获取字段配置失败: " + result.message);
     }
   } catch (error) {
     console.error("获取字段配置失败:", error);

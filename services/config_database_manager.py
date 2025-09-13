@@ -98,6 +98,20 @@ class ConfigDatabaseManager:
                     )
                 """)
                 
+                # 创建门店数据日期跟踪表
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS store_data_tracking (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        store_name TEXT NOT NULL,
+                        database_month TEXT NOT NULL,  -- 格式：2025-09
+                        latest_date TEXT NOT NULL,     -- 该门店在该月数据库中的最新数据日期
+                        total_records INTEGER DEFAULT 0,  -- 该门店在该月的总记录数
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(store_name, database_month)
+                    )
+                """)
+                
                 conn.commit()
                 logger.info("配置数据库初始化完成")
                 
@@ -351,6 +365,93 @@ class ConfigDatabaseManager:
         except Exception as e:
             logger.error(f"获取字段导出规则失败: {e}")
             return None
+    
+    def update_store_data_tracking(self, store_name: str, database_month: str, latest_date: str, total_records: int = 0) -> bool:
+        """
+        更新门店数据跟踪信息
+        
+        Args:
+            store_name: 门店名称
+            database_month: 数据库月份 (格式：2025-09)
+            latest_date: 最新数据日期
+            total_records: 总记录数
+            
+        Returns:
+            bool: 是否成功更新
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR REPLACE INTO store_data_tracking 
+                    (store_name, database_month, latest_date, total_records, updated_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """, (store_name, database_month, latest_date, total_records))
+                conn.commit()
+                logger.info(f"更新门店数据跟踪: {store_name} - {database_month} - {latest_date}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"更新门店数据跟踪失败: {e}")
+            return False
+    
+    def get_store_latest_date(self, store_name: str, database_month: str) -> Optional[str]:
+        """
+        获取门店在指定月份数据库中的最新数据日期
+        
+        Args:
+            store_name: 门店名称
+            database_month: 数据库月份 (格式：2025-09)
+            
+        Returns:
+            Optional[str]: 最新日期或None
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT latest_date FROM store_data_tracking
+                    WHERE store_name = ? AND database_month = ?
+                """, (store_name, database_month))
+                
+                result = cursor.fetchone()
+                return result[0] if result else None
+                
+        except Exception as e:
+            logger.error(f"获取门店最新日期失败: {e}")
+            return None
+    
+    def get_all_store_tracking(self) -> List[Dict[str, Any]]:
+        """
+        获取所有门店数据跟踪信息
+        
+        Returns:
+            List[Dict[str, Any]]: 跟踪信息列表
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT store_name, database_month, latest_date, total_records, updated_at
+                    FROM store_data_tracking
+                    ORDER BY store_name, database_month
+                """)
+                
+                results = []
+                for row in cursor.fetchall():
+                    results.append({
+                        'store_name': row[0],
+                        'database_month': row[1],
+                        'latest_date': row[2],
+                        'total_records': row[3],
+                        'updated_at': row[4]
+                    })
+                
+                return results
+                
+        except Exception as e:
+            logger.error(f"获取门店跟踪信息失败: {e}")
+            return []
     
     def get_export_fields(self) -> List[Dict[str, Any]]:
         """

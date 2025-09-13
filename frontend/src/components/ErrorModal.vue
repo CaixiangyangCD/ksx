@@ -6,6 +6,7 @@
     :footer="null"
     centered
     @cancel="handleClose"
+    :mask-closable="false"
   >
     <div class="error-modal">
       <div class="error-icon">

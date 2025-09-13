@@ -4,7 +4,7 @@
       共 <a-tag color="blue">{{ total }}</a-tag> 条数据
     </div>
     <a-space>
-      <a-button 
+      <!-- <a-button 
         type="primary" 
         :loading="syncLoading"
         @click="$emit('sync')"
@@ -13,10 +13,9 @@
           <SyncOutlined />
         </template>
         单日同步
-      </a-button>
+      </a-button> -->
       <a-button 
         type="primary" 
-        ghost
         :loading="batchSyncLoading"
         @click="$emit('batchSync')"
       >
@@ -25,7 +24,7 @@
         </template>
         范围同步
       </a-button>
-      <a-button 
+      <!-- <a-button 
         type="default"
         @click="$emit('config')"
       >
@@ -33,7 +32,7 @@
           <SettingOutlined />
         </template>
         门店配置
-      </a-button>
+      </a-button> -->
       <a-button 
         type="default"
         @click="$emit('fieldConfig')"
@@ -43,8 +42,17 @@
         </template>
         字段配置
       </a-button>
-      <!-- CSV导出按钮已隐藏 -->
       <a-button 
+        type="default"
+        @click="$emit('selectExcel')"
+      >
+        <template #icon>
+          <FileExcelOutlined />
+        </template>
+        选择并导出
+      </a-button>
+      <!-- CSV导出按钮已隐藏 -->
+      <!-- <a-button 
         type="default" 
         :disabled="!hasData"
         @click="$emit('exportExcel')"
@@ -53,7 +61,7 @@
           <FileExcelOutlined />
         </template>
         导出Excel
-      </a-button>
+      </a-button> -->
     </a-space>
   </div>
 </template>
@@ -73,6 +81,7 @@ interface Emits {
   (e: 'batchSync'): void
   (e: 'config'): void
   (e: 'fieldConfig'): void
+  (e: 'selectExcel'): void
   (e: 'export'): void
   (e: 'exportExcel'): void
 }

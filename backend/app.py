@@ -16,7 +16,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(project_root)
 
 # 导入API路由
-from backend.api import data, sync, export
+from backend.api import data, sync, export, import_api
 
 # 全局变量存储当前端口
 CURRENT_PORT = None
@@ -88,6 +88,7 @@ except Exception as e:
 app.include_router(data.router)
 app.include_router(sync.router)
 app.include_router(export.router)
+app.include_router(import_api.router, prefix="/api/import", tags=["import"])
 
 # 添加端口信息接口
 @app.get("/port-info")
